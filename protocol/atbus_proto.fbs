@@ -1,0 +1,76 @@
+// atbus IDL file
+
+namespace atbus.protocol;
+
+enum ERROR_CODE: int {
+    EC_SUCCESS = 0,
+    EC_UNKNOWN = -1,
+
+    // 节点错误
+    EC_NODE_EXISTS         = -1001,
+    EC_NODE_NOT_FOUND      = -1002,
+    EC_NODE_BUSID_INVALID  = -1003  // 无效的BUS ID
+
+    // 数据传输错误
+}
+
+enum CMD:byte { 
+    CMD_INVALID = 0,
+
+    //  数据协议
+    CMD_DATA_TRANSFORM_REQ = 1, 
+    CMD_DATA_TRANSFORM_RSP = 2,
+    
+    // 节点控制协议
+    CMD_NODE_SYNC_REQ = 33,
+    CMD_NODE_SYNC_RSP = 34,
+    CMD_NODE_ADD_REQ = 35,
+    CMD_NODE_ADD_RSP = 36,
+    CMD_NODE_MOD_REQ = 37,
+    CMD_NODE_MOD_RSP = 38,
+    CMD_NODE_DEL_REQ = 39,
+    CMD_NODE_DEL_RSP = 40
+
+}
+
+struct data_transform {
+}
+
+struct channel_data {
+    priority: uint = 0;
+    // shm channel
+    // memory channel
+    // tcp channel
+    // udp channel
+    // unix socket channel
+    // pipe channel
+    // file channel
+}
+
+table node_data {
+    bus_id: ulong;
+    overwrite: bool; // 是否全量覆盖
+    has_global_tree: bool = false; // 是否有全量节点表
+    children_id_mask: ubyte = 0; // 默认没有子节点
+
+    children: [node_data]; // 子节点集合
+    channels: [channel_data]; // 当前节点绑定的通道
+}
+
+struct node_tree {
+    nodes: [node_data];
+}
+
+union msg_body { data_transform, node_tree }  
+
+table msg_head {
+    cmd: CMD;
+    ret: int = 0;
+}
+
+table msg {
+    head: msg_head;
+    body: msg_body;
+}
+
+root_type msg;
