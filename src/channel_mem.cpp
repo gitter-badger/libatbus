@@ -29,6 +29,8 @@ namespace atbus {
 
         // 配置数据结构
         typedef struct {
+            size_t protect_node_count;
+            size_t protect_memory_size;
             uint64_t conf_send_timeout_ms;
         } mem_conf;
 
@@ -165,7 +167,7 @@ namespace atbus {
         }
 
         /**
-         * @brief 获取数据数据块head
+         * @brief 获取数据块head
          * @param channel 内存通道
          * @param index 节点索引
          * @return 数据块head指针
@@ -185,6 +187,28 @@ namespace atbus {
                 (*data_len) = channel->node_size - mem_block::block_head_size;
 
             return (mem_block_head*)buf;
+        }
+
+        /**
+         * @brief 获取下一个数据块index
+         * @param channel 内存通道
+         * @param index 节点索引
+         * @return 数据块head指针
+         */
+        static inline size_t mem_get_next_index(mem_channel* channel, size_t index) {
+            assert(channel);
+            return (index + 1) % channel->node_count;
+        }
+
+        /**
+         * @brief 获取上一个数据块index
+         * @param channel 内存通道
+         * @param index 节点索引
+         * @return 数据块head指针
+         */
+        static inline size_t mem_get_previous_index(mem_channel* channel, size_t index) {
+            assert(channel);
+            return (index + channel->node_count - 1) % channel->node_count;
         }
 
         /**
@@ -312,7 +336,7 @@ namespace atbus {
             fast_memcpy(buffer_start, buf, buffer_len, &block_head->fast_check);
             len -= buffer_len;
             buf = (void*)((char*)buf + buffer_len);
-            ++ write_cur;
+            write_cur = mem_get_next_index(channel, write_cur);
 
             // 数据写入.数据节点数据写入
             while (len > 0) {
@@ -328,8 +352,13 @@ namespace atbus {
                     break;
                 }
 
-                // TODO ...
-                ++ write_cur;
+                // copy data ...
+                fast_memcpy(buffer_start, buf, buffer_len, &block_head->fast_check);
+                node_head->flag = set_flag(node_head->flag, MF_WRITEN);
+
+                len -= buffer_len;
+                buf = (void*)((char*)buf + buffer_len);
+                write_cur = mem_get_next_index(channel, write_cur);
             }
 
             // 头节点设为可用
@@ -341,14 +370,63 @@ namespace atbus {
             if (NULL == channel)
                 return EN_ATBUS_ERR_PARAMS;
 
-            while(true) {
-                size_t read_cur = std::atomic_load(&channel->atomic_read_cur);
-                size_t write_cur = std::atomic_load(&channel->atomic_write_cur);
+            void* buffer_start = NULL;
+            size_t buffer_len = 0;
+            mem_block_head* block_head = NULL;
+            size_t read_cur = std::atomic_load(&channel->atomic_read_cur);
+            size_t write_cur = std::atomic_load(&channel->atomic_write_cur);
+            size_t old_read_cur = read_cur;
 
+            while(true) {
                 if (read_cur == write_cur)
                     return EN_ATBUS_ERR_NO_DATA;
+
+                block_head = mem_get_block_head(channel, read_cur, &buffer_start, &buffer_len);
+                // 容错处理 -- 不是起始节点
+                if (! check_flag(block_head->head.flag, MF_START_NODE)) {
+                    read_cur = mem_get_next_index(channel, read_cur);
+                    ++ channel->block_bad_count;
+                    continue;
+                }
+
+                // 容错处理 -- 未写入完成
+                if (! check_flag(block_head->head.flag, MF_WRITEN)) {
+                    uint64_t cnow = (uint64_t)clock();
+
+                    // 初次读取
+                    if (!block_head->first_read_time) {
+                        block_head->first_read_time = cnow;
+                    }
+
+                    uint64_t cd = cnow > block_head->first_read_time? cnow - block_head->first_read_time: block_head->first_read_time - cnow;
+                    // 写入超时
+                    if(block_head->first_read_time && cd > channel->block_timeout_count) {
+                        read_cur = mem_get_next_index(channel, read_cur);
+                        ++ channel->block_bad_count;
+                    }
+
+                    continue;
+                }
+
+                // 数据检测
+                if (block_head->buffer_size > len) {
+                    return EN_ATBUS_ERR_BUFF_LIMIT;
+                }
+
+                break;
             }
 
+            // 接收数据
+            void* buffer_start = NULL;
+            size_t buffer_len = 0;
+            mem_block_head* block_head = mem_get_block_head(channel, write_cur, &buffer_start, &buffer_len);
+            block_head->head.flag = set_flag(block_head->head.flag, MF_START_NODE);
+
+            // 重置head - 先重置非头结点
+            // 重置head - 再重置头结点
+
+            // 设置游标
+            std::atomic_store(&channel->atomic_read_cur, read_cur);
             return EN_ATBUS_ERR_SUCCESS;
         }
 
