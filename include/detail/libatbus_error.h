@@ -9,5 +9,8 @@ typedef enum {
     EN_ATBUS_ERR_BUFF_LIMIT                 = -4, // 缓冲区不足
 
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
+
+    EN_ATBUS_ERR_NODE_BAD_BLOCK             = -201,// 发现写坏的数据块
+
 } ATBUS_ERROR_TYPE;
 

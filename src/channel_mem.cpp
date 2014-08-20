@@ -4,6 +4,7 @@
  *        附带c++的部分是为了避免命名空间污染并且c++的跨平台适配更加简单
  */
 
+#include <cstdio>
 #include <assert.h>
 #include <ctime>
 #include <stdint.h>
@@ -32,6 +33,9 @@ namespace atbus {
             size_t protect_node_count;
             size_t protect_memory_size;
             uint64_t conf_send_timeout_ms;
+
+            // TODO 接收端校验号(用于保证只有一个接收者)
+            volatile std::atomic<size_t> atomic_recver_identify;
         } mem_conf;
 
         // 通道头
@@ -46,13 +50,22 @@ namespace atbus {
             volatile std::atomic<size_t> atomic_read_cur;   // std::atomic也是POD类型
             volatile std::atomic<size_t> atomic_write_cur;  // std::atomic也是POD类型
 
+            // 第一次读到正在写入数据的时间
+            uint32_t first_failed_writing_time;
+
+            volatile std::atomic<uint32_t> atomic_operation_seq; // 操作序列号(用于保证只有一个接收者)
+
             // 配置
             mem_conf conf;
-            volatile std::atomic<size_t> atomic_recver_identify; // 接收端校验号(用于保证只有一个接收者)
+            size_t area_channel_offset;
+            size_t area_head_offset;
+            size_t area_data_offset;
+            size_t area_end_offset;
 
             // 统计信息
             size_t block_bad_count; // 读取到坏块次数
             size_t block_timeout_count; // 读取到写入超时块次数
+            size_t node_bad_count; // 读取到坏node次数
         } mem_channel;
 
         // 对齐头
@@ -65,13 +78,12 @@ namespace atbus {
         // 数据节点头
         typedef struct {
             uint32_t flag;
+            uint32_t operation_seq;
         } mem_node_head;
 
         // 数据头
         typedef struct {
-            mem_node_head head;
             size_t buffer_size;
-            uint64_t first_read_time;
             data_align_type fast_check;
         } mem_block_head;
 
@@ -79,8 +91,40 @@ namespace atbus {
         typedef enum {
             MF_WRITEN       = 0x00000001,
             MF_START_NODE   = 0x00000002,
-            MF_END_NODE     = 0x00000004,
         } MEM_FLAG;
+
+        /**
+         * @brief 内存通道常量
+         * @note 为了压缩内存占用空间，这里使用手动对齐，不直接用 #pragma pack(sizoef(long))
+         */
+        struct mem_block {
+            static const size_t channel_head_size = sizeof(mem_channel_head_align);
+            static const size_t block_head_size = ((sizeof(mem_block_head) - 1) / sizeof(data_align_type) + 1) * sizeof(data_align_type);
+            static const size_t node_head_size = ((sizeof(mem_node_head) - 1) / sizeof(data_align_type) + 1) * sizeof(data_align_type);
+
+            static const size_t node_data_size = ATBUS_MACRO_DATA_NODE_SIZE;
+            static const size_t node_head_data_size = node_data_size - block_head_size;
+        };
+
+        /**
+         * @brief 检测数字是2的几次幂
+         */
+        template<size_t S>
+        struct mem_bin_power_check {
+            static_assert(0 == (S & (S - 1)), "not 2^N"); // 必须是2的N次幂
+            static_assert(S, "must not be 0"); // 必须大于0
+
+            enum {
+                value = mem_bin_power_check< (S >> 1) >::value + 1
+            };
+        };
+
+        template<>
+        struct mem_bin_power_check<1> {
+            enum {
+                value = 0
+            };
+        };
 
         /**
          * @brief 检查标记位
@@ -106,47 +150,30 @@ namespace atbus {
          * @brief 生存默认配置
          * @param conf
          */
-        static void mem_default_conf(mem_conf * conf) {
-            assert(conf);
+        static void mem_default_conf(mem_channel * channel) {
+            assert(channel);
 
-            conf->conf_send_timeout_ms = 1;
+            channel->conf.conf_send_timeout_ms = 1;
+
+            // 默认留1%的数据块用于保护缓冲区
+            if (!channel->conf.protect_node_count && channel->conf.protect_memory_size) {
+                channel->conf.protect_node_count = (channel->conf.protect_memory_size - 1) / mem_block::node_data_size + 1;
+            } else if (!channel->conf.protect_node_count) {
+                channel->conf.protect_node_count = channel->node_count / 100;
+            }
+
+            if (channel->conf.protect_node_count > channel->node_count)
+                channel->conf.protect_node_count = channel->node_count;
+
+            channel->conf.protect_memory_size = channel->conf.protect_node_count * mem_block::node_data_size;
         }
-
-        /**
-         * @brief 内存通道常量
-         */
-        static struct mem_block {
-            static const size_t channel_head_size = sizeof(mem_channel_head_align);
-            static const size_t block_head_size = ((sizeof(mem_block_head) - 1) / sizeof(data_align_type) + 1) * sizeof(data_align_type);
-            static const size_t node_head_size = ((sizeof(mem_node_head) - 1) / sizeof(data_align_type) + 1) * sizeof(data_align_type);
-        };
-
-        /**
-         * @brief 检测数字是2的几次幂
-         */
-        template<size_t S>
-        struct mem_bin_power_check {
-            static_assert(0 == (S & (S - 1)), "not 2^N"); // 必须是2的N次幂
-            static_assert(S, "must not be 0"); // 必须大于0
-
-            enum {
-                value = mem_bin_power_check< (S >> 1) >::value + 1
-            };
-        };
-
-        template<>
-        struct mem_bin_power_check<1> {
-            enum {
-                value = 0
-            };
-        };
 
         /**
          * @brief 获取数据节点head
          * @param channel 内存通道
          * @param index 节点索引
          * @param data 数据区起始地址
-         * @param data_len 数据区长度
+         * @param data_len 到缓冲区末尾的长度
          * @return 节点head指针
          */
         static inline mem_node_head* mem_get_node_head(mem_channel* channel, size_t index, void** data, size_t* data_len) {
@@ -154,14 +181,19 @@ namespace atbus {
             assert(index < channel->node_count);
 
             char* buf = (char*)channel;
-            buf += mem_block::channel_head_size;
+            buf += channel->area_head_offset - channel->area_channel_offset;
+            buf += index * mem_block::node_head_size;
 
-            buf += index * channel->node_size;
+            if (data || data_len) {
+                char* data_ = (char*)channel + channel->area_data_offset - channel->area_channel_offset;
+                data_ += index * mem_block::node_data_size;
 
-            if (data)
-                (*data) = (void*)(buf + mem_block::node_head_size);
-            if (data_len)
-                (*data_len) = channel->node_size - mem_block::node_head_size;
+                if (data)
+                    (*data) = (void*)data_;
+
+                if (data_len)
+                    (*data_len) = channel->area_end_offset - channel->area_channel_offset + (char*)channel - data_;
+            }
 
             return (mem_node_head*)buf;
         }
@@ -176,103 +208,126 @@ namespace atbus {
             assert(channel);
             assert(index < channel->node_count);
 
-            char* buf = (char*)channel;
-            buf += mem_block::channel_head_size;
-
-            buf += index * channel->node_size;
+            char* buf = (char*)channel + channel->area_data_offset - channel->area_channel_offset;
+            buf += index * mem_block::node_data_size;
 
             if (data)
                 (*data) = (void*)(buf + mem_block::block_head_size);
+
             if (data_len)
-                (*data_len) = channel->node_size - mem_block::block_head_size;
+                (*data_len) = channel->area_end_offset - channel->area_channel_offset + (char*)channel - buf - mem_block::block_head_size;
 
             return (mem_block_head*)buf;
         }
 
         /**
-         * @brief 获取下一个数据块index
+         * @brief 获取后面的数据块index
          * @param channel 内存通道
          * @param index 节点索引
+         * @param offset 索引偏移
          * @return 数据块head指针
          */
-        static inline size_t mem_get_next_index(mem_channel* channel, size_t index) {
+        static inline size_t mem_next_index(mem_channel* channel, size_t index, size_t offset) {
             assert(channel);
-            return (index + 1) % channel->node_count;
+            return (index + offset) % channel->node_count;
         }
 
         /**
-         * @brief 获取上一个数据块index
+         * @brief 获取前面的的数据块index
          * @param channel 内存通道
          * @param index 节点索引
+         * @param offset 索引偏移
          * @return 数据块head指针
          */
-        static inline size_t mem_get_previous_index(mem_channel* channel, size_t index) {
+        static inline size_t mem_previous_index(mem_channel* channel, size_t index, size_t offset) {
             assert(channel);
-            return (index + channel->node_count - 1) % channel->node_count;
+            return (index + channel->node_count - offset) % channel->node_count;
+        }
+
+        static uint32_t mem_fetch_operation_seq(mem_channel* channel) {
+            uint32_t ret = std::atomic_load(&channel->atomic_operation_seq);
+            bool f = false;
+            while(!f) {
+                // CAS
+                f = std::atomic_compare_exchange_weak(&channel->atomic_operation_seq, &ret, (ret + 1)? (ret + 1): ret + 2);
+            }
+
+            return (ret + 1)? (ret + 1): ret + 2;
         }
 
         /**
-         * @brief 利用系统总线做快速copy
-         * @param dest 拷贝目标
-         * @param src 拷贝源数据
-         * @param len 拷贝长度
-         * @param check 校验数据
-         * @note 大数据拷贝：VC下性能大约是原生memcpy的5倍，GCC下大约是原生memcpy性能的4倍，Clang下大约是原生memcpy性能的1.5倍
-         * @note 小数据拷贝：VC下性能大约是原生memcpy的5倍，GCC下大约是原生memcpy性能的2倍，Clang下大约是原生memcpy性能的1.4倍
-         * @note 以上数据测试都是在开启编译优化的情况下(编译器自带lib都是开了编译优化的)
+         * @brief 计算一定长度数据需要的数据node数量
+         * @param len 数据长度
+         * @return 数据长度需要的数据块数量
          */
-        static inline void fast_memcpy(void* dest, const void* src, size_t len, data_align_type* check) {
-            data_align_type* adest = (data_align_type*) dest;
-            const data_align_type* asrc = (const data_align_type*) src;
-
-            size_t loop = len >> mem_bin_power_check<sizeof(data_align_type)>::value;
-            while (loop --) {
-                *adest = *asrc;
-
-                // 校验码算法
-                if (check) {
-                    *check ^= *asrc;
-                }
-
-                // 这里使用自增以便于编译器优化
-                ++ adest;
-                ++ asrc;
-            }
-
-            // 未对齐部分直接memcpy
-            loop = len & (sizeof(data_align_type) - 1);
-            dest = adest;
-            src = asrc;
-            while (loop --) {
-                *(char*)dest = (*(char*)src);
-                dest = ((char*)dest + 1);
-                src = ((char*)src + 1);
-            }
+        static inline size_t mem_calc_node_num(mem_channel* channel, size_t len) {
+            assert(channel);
+            return (len + mem_block::block_head_size - 1) / channel->node_size + 1;
         }
 
-        // 节点大小一定要大于头结点
-        static_assert(ATBUS_MACRO_DATA_NODE_SIZE > mem_block::block_head_size, "node size must be greater than block head");
+        /**
+         * @brief 生成校验码
+         * @param src 源数据
+         * @param len 数据长度
+         */
+        static data_align_type mem_fast_check(const void* src, size_t len) {
+            data_align_type ret = static_cast<data_align_type>(0x1505150515051505ULL);
+            const size_t padding = sizeof(data_align_type) * 5;
+            const data_align_type* p = (const data_align_type*)(src);
+            while (len >= sizeof(data_align_type)) {
+                ret = ((ret << padding) + ret) + *p;
+                ++ p;
+                len -= sizeof(data_align_type);
+            }
+
+            data_align_type tail = 0;
+            memcpy(&tail, p, len);
+            return ((ret << padding) + ret) + tail;
+        }
+
         // 对齐单位的大小必须是2的N次方
         static_assert(0 == (sizeof(data_align_type) & (sizeof(data_align_type) - 1)), "data align size must be 2^N");
         // 节点大小必须是对齐单位的2的N次方倍
-        static_assert(0 == (ATBUS_MACRO_DATA_NODE_SIZE & (ATBUS_MACRO_DATA_NODE_SIZE - data_align_type)), "node size must be [data align size] * 2^N");
+        static_assert(0 == (mem_block::node_data_size & (mem_block::node_data_size - sizeof(data_align_type))), "node size must be [data align size] * 2^N");
+
+
+        int mem_attach(void* buf, size_t len, mem_channel** channel, const mem_conf* conf) {
+            // 缓冲区最小长度为数据头+空洞node的长度
+            if (len < sizeof(mem_channel_head_align) + mem_block::node_data_size + mem_block::node_head_size)
+                return EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL;
+
+            mem_channel_head_align* head = (mem_channel_head_align*)buf;
+            if (channel)
+                *channel = &head->channel;
+
+            return EN_ATBUS_ERR_SUCCESS;
+        }
 
         int mem_init(void* buf, size_t len, mem_channel** channel, const mem_conf* conf) {
             // 缓冲区最小长度为数据头+空洞node的长度
-            if (len < sizeof(mem_channel_head_align) + ATBUS_MACRO_DATA_NODE_SIZE)
+            if (len < sizeof(mem_channel_head_align) + mem_block::node_data_size + mem_block::node_head_size)
                 return EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL;
 
             memset(buf, 0x00, len);
             mem_channel_head_align* head = (mem_channel_head_align*)buf;
 
-            head->channel.node_size = ATBUS_MACRO_DATA_NODE_SIZE;
-            head->channel.node_count = (len - mem_block::channel_head_size) / head->channel.node_size;
+            // 节点计算
+            head->channel.node_size = mem_block::node_data_size;
+            head->channel.node_count = (len - mem_block::channel_head_size) / (head->channel.node_size + mem_block::node_head_size);
 
+            // 偏移位置计算
+            head->channel.area_channel_offset = (char*)&head->channel - (char*)buf;
+            head->channel.area_head_offset = sizeof(mem_channel_head_align);
+            head->channel.area_data_offset = head->channel.area_head_offset + head->channel.node_count * mem_block::node_head_size;
+            head->channel.area_end_offset = head->channel.area_data_offset + head->channel.node_count * head->channel.node_size;
+
+            // 配置初始化
             if (NULL != conf)
                 memcpy(&head->channel.conf, &conf, sizeof(conf));
             else
-                mem_default_conf(&head->channel.conf);
+                mem_default_conf(&head->channel);
 
+            // 输出
             if (channel)
                 *channel = &head->channel;
 
@@ -283,26 +338,32 @@ namespace atbus {
             if (NULL == channel)
                 return EN_ATBUS_ERR_PARAMS;
 
-            size_t head_data_size = channel->node_size - mem_block::block_head_size;
-            size_t node_count = 1;
-            if (len > head_data_size) {
-                size_t node_data_size = channel->node_size - mem_block::node_head_size;
-                node_count += (len - head_data_size - 1) / node_data_size + 1;
-            }
+            if (0 == len)
+                return EN_ATBUS_ERR_SUCCESS;
 
+            size_t node_count = mem_calc_node_num(channel, len);
             // 要写入的数据比可用的缓冲区还大
-            if (node_count >= channel->node_count)
+            if (node_count >= channel->node_count - channel->conf.protect_node_count)
                 return EN_ATBUS_ERR_BUFF_LIMIT;
 
+            // 获取操作序号
+            uint32_t opr_seq = mem_fetch_operation_seq(channel);
+
+            // 游标操作
             size_t read_cur = 0;
             size_t new_write_cur, write_cur = std::atomic_load(&channel->atomic_write_cur);
 
             while(true) {
                 read_cur = std::atomic_load(&channel->atomic_read_cur);
 
-                size_t available_node = (read_cur + channel->node_count - write_cur) % channel->node_count;
-                // 要留下一个node做tail
-                if (node_count >= available_node)
+                // 要留下一个node做tail, 所以多减1
+                size_t available_node = (read_cur + channel->node_count - write_cur - 1) % channel->node_count;
+                if (available_node >= channel->conf.protect_node_count)
+                    available_node -= channel->conf.protect_node_count;
+                else
+                    available_node = 0;
+
+                if (node_count > available_node)
                     return EN_ATBUS_ERR_BUFF_LIMIT;
 
                 // 新的尾部node游标
@@ -317,117 +378,214 @@ namespace atbus {
                 // 发现冲突原子操作失败则重试
             }
 
-            // 数据写入.头节点数据写入
-            //fast_memcpy
+
+            // 数据缓冲区操作 - 初始化
             void* buffer_start = NULL;
             size_t buffer_len = 0;
             mem_block_head* block_head = mem_get_block_head(channel, write_cur, &buffer_start, &buffer_len);
-            block_head->head.flag = set_flag(block_head->head.flag, MF_START_NODE);
+            memset(block_head, 0x00, sizeof(mem_block_head));
 
-            // 头结点足够大
-            if (len <= buffer_len) {
-                fast_memcpy(buffer_start, buf, len, &block_head->fast_check);
-                block_head->head.flag = set_flag(block_head->head.flag, MF_END_NODE);
-                block_head->head.flag = set_flag(block_head->head.flag, MF_WRITEN);
-                return EN_ATBUS_ERR_SUCCESS;
-            }
+            // 数据缓冲区操作 - 要写入的节点
+            {
+                mem_node_head* first_node_head = mem_get_node_head(channel, write_cur, NULL, NULL);
+                first_node_head->flag = set_flag(first_node_head->flag, MF_START_NODE);
+                first_node_head->operation_seq = opr_seq;
 
-            // 头节点不够大
-            fast_memcpy(buffer_start, buf, buffer_len, &block_head->fast_check);
-            len -= buffer_len;
-            buf = (void*)((char*)buf + buffer_len);
-            write_cur = mem_get_next_index(channel, write_cur);
+                for (size_t i = mem_next_index(channel, write_cur, 1); i != new_write_cur; i = mem_next_index(channel, i, 1)) {
+                    mem_node_head* this_node_head = mem_get_node_head(channel, i, NULL, NULL);
 
-            // 数据写入.数据节点数据写入
-            while (len > 0) {
-                // 不应该到达空洞位置
-                if (write_cur == new_write_cur)
-                    return EN_ATBUS_ERR_INNER;
+                    // 写数据node出现冲突
+                    if (this_node_head->operation_seq) {
+                        first_node_head->flag = set_flag(first_node_head->flag, MF_WRITEN);
+                        block_head->buffer_size = 0;
+                        return EN_ATBUS_ERR_NODE_BAD_BLOCK;
+                    }
 
-                mem_node_head* node_head = mem_get_node_head(channel, write_cur, &buffer_start, &buffer_len);
-                if (len <= buffer_len) {
-                    fast_memcpy(buffer_start, buf, len, &block_head->fast_check);
-                    node_head->flag = set_flag(node_head->flag, MF_END_NODE);
-                    node_head->flag = set_flag(node_head->flag, MF_WRITEN);
-                    break;
+                    this_node_head->operation_seq = opr_seq;
                 }
+            }
+            block_head->buffer_size = len;
 
-                // copy data ...
-                fast_memcpy(buffer_start, buf, buffer_len, &block_head->fast_check);
-                node_head->flag = set_flag(node_head->flag, MF_WRITEN);
+            // 数据写入
+            // fast_memcpy
+            // 数据有回绕
+            if (new_write_cur && new_write_cur < write_cur) {
+                size_t copy_len = len > buffer_len? buffer_len: len;
+                memcpy(buffer_start, buf, copy_len);
 
-                len -= buffer_len;
-                buf = (void*)((char*)buf + buffer_len);
-                write_cur = mem_get_next_index(channel, write_cur);
+                // 回绕nodes
+                mem_get_node_head(channel, 0, &buffer_start, NULL);
+                memcpy(buffer_start, (const char*)buf + copy_len, len - copy_len);
+            } else {
+                memcpy(buffer_start, buf, len);
+            }
+            block_head->fast_check = mem_fast_check(buf, len);
+
+            // 设置首node header，数据写完标记
+            {
+                mem_node_head* this_node_head = mem_get_node_head(channel, write_cur, NULL, NULL);
+                this_node_head->flag = set_flag(this_node_head->flag, MF_WRITEN);
+
+                // 再检查一次，以防memcpy时发生写冲突
+                if (opr_seq != this_node_head->operation_seq) {
+                    return EN_ATBUS_ERR_NODE_BAD_BLOCK;
+                }
             }
 
-            // 头节点设为可用
-            block_head->head.flag = set_flag(block_head->head.flag, MF_WRITEN);
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int mem_recv(mem_channel* channel, void* buf, size_t len) {
+        int mem_recv(mem_channel* channel, void* buf, size_t len, size_t* recv_size) {
             if (NULL == channel)
                 return EN_ATBUS_ERR_PARAMS;
+
+            int ret = EN_ATBUS_ERR_SUCCESS;
 
             void* buffer_start = NULL;
             size_t buffer_len = 0;
             mem_block_head* block_head = NULL;
-            size_t read_cur = std::atomic_load(&channel->atomic_read_cur);
+            size_t read_begin_cur = std::atomic_load(&channel->atomic_read_cur);
+            size_t ori_read_cur = read_begin_cur;
+            size_t read_end_cur;
             size_t write_cur = std::atomic_load(&channel->atomic_write_cur);
-            size_t old_read_cur = read_cur;
 
             while(true) {
-                if (read_cur == write_cur)
-                    return EN_ATBUS_ERR_NO_DATA;
+                read_end_cur = read_begin_cur;
 
-                block_head = mem_get_block_head(channel, read_cur, &buffer_start, &buffer_len);
+                if (read_begin_cur == write_cur) {
+                    ret = ret? ret: EN_ATBUS_ERR_NO_DATA;
+                    break;
+                }
+
+                mem_node_head* node_head = mem_get_node_head(channel, read_begin_cur, NULL, NULL);
                 // 容错处理 -- 不是起始节点
-                if (! check_flag(block_head->head.flag, MF_START_NODE)) {
-                    read_cur = mem_get_next_index(channel, read_cur);
-                    ++ channel->block_bad_count;
+                if (! check_flag(node_head->flag, MF_START_NODE)) {
+                    read_begin_cur = mem_next_index(channel, read_begin_cur, 1);
+                    ++ channel->node_bad_count;
                     continue;
                 }
 
                 // 容错处理 -- 未写入完成
-                if (! check_flag(block_head->head.flag, MF_WRITEN)) {
-                    uint64_t cnow = (uint64_t)clock();
+                if (! check_flag(node_head->flag, MF_WRITEN)) {
+                    uint64_t cnow = (uint64_t)clock() * (CLOCKS_PER_SEC / 1000); // 转换到毫秒
 
                     // 初次读取
-                    if (!block_head->first_read_time) {
-                        block_head->first_read_time = cnow;
+                    if (!channel->first_failed_writing_time) {
+                        channel->first_failed_writing_time = cnow;
+                        ret = ret? ret: EN_ATBUS_ERR_NO_DATA;
+                        break;
                     }
 
-                    uint64_t cd = cnow > block_head->first_read_time? cnow - block_head->first_read_time: block_head->first_read_time - cnow;
+                    uint64_t cd = cnow > channel->first_failed_writing_time? cnow - channel->first_failed_writing_time: channel->first_failed_writing_time - cnow;
                     // 写入超时
-                    if(block_head->first_read_time && cd > channel->block_timeout_count) {
-                        read_cur = mem_get_next_index(channel, read_cur);
+                    if(channel->first_failed_writing_time && cd > channel->block_timeout_count) {
+                        read_begin_cur = mem_next_index(channel, read_begin_cur, 1);
                         ++ channel->block_bad_count;
+                        ++ channel->node_bad_count;
+                        ++ channel->block_timeout_count;
+                        continue;
                     }
 
-                    continue;
+                    // 未到超时时间
+                    ret = ret? ret: EN_ATBUS_ERR_NO_DATA;
+                    break;
                 }
 
                 // 数据检测
+                block_head = mem_get_block_head(channel, read_begin_cur, &buffer_start, &buffer_len);
+
+                // 缓冲区长度异常
+                if (!block_head->buffer_size || block_head->buffer_size >= channel->area_end_offset - channel->area_data_offset - channel->conf.protect_memory_size) {
+                    ret = ret? ret: EN_ATBUS_ERR_NODE_BAD_BLOCK;
+                    read_begin_cur = mem_next_index(channel, read_begin_cur, 1);
+                    ++ channel->node_bad_count;
+                    continue;
+                }
+
+                // 写出的缓冲区不足
                 if (block_head->buffer_size > len) {
-                    return EN_ATBUS_ERR_BUFF_LIMIT;
+                    ret = ret? ret: EN_ATBUS_ERR_BUFF_LIMIT;
+                    if(recv_size)
+                        *recv_size = block_head->buffer_size;
+
+                    break;
+                }
+
+
+                // 重置操作码（防冲突+读检测）
+                uint32_t check_opr_seq = node_head->operation_seq;
+                for(read_end_cur = read_begin_cur; read_end_cur != write_cur; read_end_cur = mem_next_index(channel, read_end_cur, 1)) {
+                    mem_node_head* this_node_head = mem_get_node_head(channel, read_end_cur, NULL, NULL);
+                    if (this_node_head->operation_seq != check_opr_seq) {
+                        break;
+                    }
+
+                    this_node_head->operation_seq = 0;
+                    this_node_head->flag = 0;
+                }
+
+                // 有效的node数量检查
+                {
+                    size_t nodes_num = (read_end_cur + channel->node_count - read_begin_cur) % channel->node_count;
+                    if (mem_calc_node_num(channel, block_head->buffer_size) != nodes_num) {
+                        ret = ret? ret: EN_ATBUS_ERR_NODE_BAD_BLOCK;
+                        read_begin_cur = mem_next_index(channel, read_begin_cur, 1);
+                        ++ channel->node_bad_count;
+                        ++ channel->block_bad_count;
+                        continue;
+                    }
                 }
 
                 break;
             }
 
-            // 接收数据
-            void* buffer_start = NULL;
-            size_t buffer_len = 0;
-            mem_block_head* block_head = mem_get_block_head(channel, write_cur, &buffer_start, &buffer_len);
-            block_head->head.flag = set_flag(block_head->head.flag, MF_START_NODE);
 
-            // 重置head - 先重置非头结点
-            // 重置head - 再重置头结点
+            do {
+
+                // 出错退出, 移动读游标到最后读取位置
+                if (ret) {
+                    break;
+                }
+
+                channel->first_failed_writing_time = 0;
+
+                // 接收数据 - 无回绕
+
+                if (block_head->buffer_size <= buffer_len) {
+                    memcpy(buf, buffer_start, block_head->buffer_size);
+
+                } else { // 接收数据 - 有回绕
+                    memcpy(buf, buffer_start, buffer_len);
+
+                    // 回绕nodes
+                    mem_get_node_head(channel, 0, &buffer_start, NULL);
+                    memcpy((char*)buf + buffer_len, buffer_start, block_head->buffer_size - buffer_len);
+                }
+                data_align_type fast_check = mem_fast_check(buf, block_head->buffer_size);
+
+                if(recv_size)
+                    *recv_size = block_head->buffer_size;
+
+                // 校验不通过
+                if (fast_check != block_head->fast_check) {
+                    ret = ret? ret: EN_ATBUS_ERR_NODE_BAD_BLOCK;
+                }
+
+            } while(false);
+
+            // 如果有出错节点，重置出错节点的head
+            if (ori_read_cur != read_begin_cur) {
+                mem_node_head* node_head = mem_get_node_head(channel, 0, NULL, NULL);
+
+                for (size_t i = ori_read_cur; i != read_begin_cur; i = (i + 1) % channel->node_count) {
+                    node_head[i].flag = 0;
+                    node_head[i].operation_seq = 0;
+                }
+            }
 
             // 设置游标
-            std::atomic_store(&channel->atomic_read_cur, read_cur);
-            return EN_ATBUS_ERR_SUCCESS;
+            std::atomic_store(&channel->atomic_read_cur, read_end_cur);
+            return ret;
         }
 
     }

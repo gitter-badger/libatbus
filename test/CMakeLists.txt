@@ -44,6 +44,7 @@ elseif(PROJECT_TEST_ENABLE_BOOST_UNIT_TEST)
 endif()
 
 include_directories(${PROJECT_TEST_INC_DIR})
+include_directories(${PROJECT_ROOT_SRC_DIR})
 
 file(GLOB_RECURSE PROJECT_TEST_SRC_LIST 
     ${PROJECT_TEST_SRC_DIR}/*.h 
@@ -66,7 +67,8 @@ endif()
 set(EXECUTABLE_OUTPUT_PATH "${PROJECT_BINARY_DIR}/test")
 
 add_executable(unit_test ${PROJECT_TEST_SRC_LIST})
-target_link_libraries(unit_test 
+target_link_libraries(unit_test
+    ${PROJECT_LIB_LINK} 
     ${PROJECT_TEST_LIB_LINK}
 )
 
