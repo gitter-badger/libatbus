@@ -12,5 +12,7 @@ typedef enum {
 
     EN_ATBUS_ERR_NODE_BAD_BLOCK             = -201,// 发现写坏的数据块
 
+    EN_ATBUS_ERR_SHM_GET_FAILED             = -301,// 发现写坏的数据块
+
 } ATBUS_ERROR_TYPE;
 

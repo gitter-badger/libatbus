@@ -42,6 +42,7 @@ namespace atbus {
         typedef struct {
             // 数据节点
             size_t node_size;
+            size_t node_size_bin_power; // (用于优化算法) node_size = 1 << node_size_bin_power
             size_t node_count;
 
             // [atomic_read_cur, atomic_write_cur) 内的数据块都是已使用的数据块
@@ -157,7 +158,7 @@ namespace atbus {
 
             // 默认留1%的数据块用于保护缓冲区
             if (!channel->conf.protect_node_count && channel->conf.protect_memory_size) {
-                channel->conf.protect_node_count = (channel->conf.protect_memory_size - 1) / mem_block::node_data_size + 1;
+                channel->conf.protect_node_count = (channel->conf.protect_memory_size + mem_block::node_data_size - 1) / mem_block::node_data_size;
             } else if (!channel->conf.protect_node_count) {
                 channel->conf.protect_node_count = channel->node_count / 100;
             }
@@ -262,13 +263,15 @@ namespace atbus {
          */
         static inline size_t mem_calc_node_num(mem_channel* channel, size_t len) {
             assert(channel);
-            return (len + mem_block::block_head_size - 1) / channel->node_size + 1;
+            // channel->node_size 必须是2的N次方，所以使用优化算法
+            return (len + mem_block::block_head_size + channel->node_size - 1) >> channel->node_size_bin_power;
         }
 
         /**
          * @brief 生成校验码
          * @param src 源数据
          * @param len 数据长度
+         * @note DJB Hash算法的简化变种，由于仅作校验码并不强调散列特性，故而简化操作以减少CPU消耗。
          */
         static data_align_type mem_fast_check(const void* src, size_t len) {
             data_align_type ret = static_cast<data_align_type>(0x1505150515051505ULL);
@@ -287,6 +290,8 @@ namespace atbus {
 
         // 对齐单位的大小必须是2的N次方
         static_assert(0 == (sizeof(data_align_type) & (sizeof(data_align_type) - 1)), "data align size must be 2^N");
+        // 节点大小必须是2的N次
+        static_assert(0 == ((mem_block::node_data_size - 1) & mem_block::node_data_size), "node size must be 2^N");
         // 节点大小必须是对齐单位的2的N次方倍
         static_assert(0 == (mem_block::node_data_size & (mem_block::node_data_size - sizeof(data_align_type))), "node size must be [data align size] * 2^N");
 
@@ -313,6 +318,14 @@ namespace atbus {
 
             // 节点计算
             head->channel.node_size = mem_block::node_data_size;
+            {
+                head->channel.node_size_bin_power = 0;
+                size_t node_size = head->channel.node_size;
+                while (node_size > 1) {
+                    node_size >>= 1;
+                    ++ head->channel.node_size_bin_power;
+                }
+            }
             head->channel.node_count = (len - mem_block::channel_head_size) / (head->channel.node_size + mem_block::node_head_size);
 
             // 偏移位置计算
