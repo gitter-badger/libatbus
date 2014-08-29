@@ -140,5 +140,8 @@ namespace atbus {
             return mem_recv(switcher.mem, buf, len, recv_size);
         }
 
+        std::pair<size_t, size_t> shm_last_action() {
+            return mem_last_action();
+        }
     }
 }

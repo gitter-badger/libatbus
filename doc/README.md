@@ -54,14 +54,15 @@
 **通道结构**
 
 所有消息对齐到size_t的大小
-|4K通道头|消息队列偏移地址列表size_t * 最大消息个数|数据区
+|4K通道头|数据节点头*数据节点个数|数据区|
 
 ```cpp
 // 通道头
 typedef struct {
     // 数据节点
-    size_t channel_size;
-    size_t max_msg_count;
+    size_t node_size;  /** 每个节点的size **/
+    size_t node_size_bin_power; // (用于优化算法) node_size = 1 << node_size_bin_power
+    size_t node_count; /** 数据节点个数 **/
 
     // [atomic_read_cur, atomic_write_cur) 内的数据块都是已使用的数据块
     // atomic_write_cur指向的数据块一定是空块，故而必然有一个node的空洞
@@ -69,17 +70,33 @@ typedef struct {
     volatile std::atomic<size_t> atomic_read_cur;   // std::atomic也是POD类型
     volatile std::atomic<size_t> atomic_write_cur;  // std::atomic也是POD类型
 
-	volatile std::atomic<uin32_t> atomic_operation_seq;  // 用于分配操作序列
-	uint64_t last_block_time; // 读堵塞时间--用于容错处理
-	
+    // 第一次读到正在写入数据的时间
+    uint32_t first_failed_writing_time; /** 第一次读到正在写节点的时间，用于跳过错误写 **/
+
+    volatile std::atomic<uint32_t> atomic_operation_seq; // 操作序列号(用于保证只有一个接收者)
+
     // 配置
     mem_conf conf;
-    volatile std::atomic<size_t> atomic_recver_identify; // 接收端校验号(用于保证只有一个接收者)
+    size_t area_channel_offset; /** 地址偏移: channel **/
+    size_t area_head_offset;    /** 地址偏移: 数据节点头 **/
+    size_t area_data_offset;	/** 地址偏移: 数据区 **/
+    size_t area_end_offset;		/** 地址偏移: 使用的缓冲区尾部 **/
 
     // 统计信息
-    size_t block_bad_count; // 读取到坏块次数
+    size_t block_bad_count; 	// 读取到坏块次数
     size_t block_timeout_count; // 读取到写入超时块次数
+    size_t node_bad_count; 		// 读取到坏node次数
 } mem_channel;
+
+// 配置数据结构
+typedef struct {
+    size_t protect_node_count;	/** 保护节点个数：用于降低冲突概率 **/
+    size_t protect_memory_size;	/** 保护内存大小：用于降低冲突概率 **/
+    uint64_t conf_send_timeout_ms;	/** 发送超时阀值：用于降低冲突概率 **/
+
+    // TODO 接收端校验号(用于保证只有一个接收者)
+    volatile std::atomic<size_t> atomic_recver_identify;
+} mem_conf;
 ```
 
 **写数据步骤：**
@@ -115,3 +132,7 @@ typedef struct {
 
 在设置合理的情况下这两个措施基本能保证数据不出错（如果设置合理，再出错的概率按某人的说法就是，硬件也会出错坏掉的啊）
 
+**共享内存通道压力测试**
+1个读进程，5个写进程
+读进程满负荷运行3小时，接收数据3390712433次，接收数据12933GB，出现9次数据坏块错误，无数据校验错误
+出错率低于3.7亿分之一

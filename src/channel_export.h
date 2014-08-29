@@ -13,7 +13,7 @@
 
 #include <stdint.h>
 #include <cstddef>
-
+#include <utility>
 
 #ifdef __unix__
 #include <sys/ipc.h>
@@ -33,6 +33,7 @@ namespace atbus {
         extern int mem_init(void* buf, size_t len, mem_channel** channel, const mem_conf* conf);
         extern int mem_send(mem_channel* channel, const void* buf, size_t len);
         extern int mem_recv(mem_channel* channel, void* buf, size_t len, size_t* recv_size);
+        extern std::pair<size_t, size_t> mem_last_action();
 
         struct shm_channel;
         struct shm_conf;
@@ -40,6 +41,7 @@ namespace atbus {
         extern int shm_init(key_t shm_key, size_t len, shm_channel** channel, const shm_conf* conf);
         extern int shm_send(shm_channel* channel, const void* buf, size_t len);
         extern int shm_recv(shm_channel* channel, void* buf, size_t len, size_t* recv_size);
+        extern std::pair<size_t, size_t> shm_last_action();
     }
 }
 

@@ -17,14 +17,19 @@
 int main(int argc, char* argv[])
 {
     if (argc < 2) {
-        printf("usage: %s <shm key> [shm size]\n", argv[0]);
+        printf("usage: %s <shm key> [max unit size] [shm size]\n", argv[0]);
         return 0;
     }
 
     using namespace atbus::channel;
-    size_t buffer_len = 64 * 1024 * 1024; // 64MB
+    size_t max_n = 1024;
     if (argc > 2)
-        buffer_len = (size_t)strtol(argv[2], NULL, 10);
+        max_n = (size_t)strtol(argv[2], NULL, 10) / sizeof(size_t);
+
+    size_t buffer_len = 64 * 1024 * 1024; // 64MB
+    if (argc > 3)
+        buffer_len = (size_t)strtol(argv[3], NULL, 10);
+
     char* buffer = new char[buffer_len];
 
     shm_channel* channel = NULL;
@@ -47,10 +52,10 @@ int main(int argc, char* argv[])
     // 创建写线程
     std::thread* write_threads;
     write_threads = new std::thread([&]{
-        size_t buf_pool[1024];
+        size_t buf_pool[max_n];
 
         while(true) {
-            size_t n = rand() % 1024; // 最大 4K-8K的包
+            size_t n = rand() % max_n; // 最大 4K-8K的包
             ++ sum_seq;
 
             for (size_t i = 0; i < n; ++ i) {
@@ -64,6 +69,11 @@ int main(int argc, char* argv[])
                     ++ sum_send_full;
                 } else {
                     ++ sum_send_err;
+
+                    std::pair<size_t, size_t> last_action = shm_last_action();
+                    fprintf(stderr, "shm_send error, ret code: %d. start: %d, end: %d\n",
+                        res, (int)last_action.first, (int)last_action.second
+                    );
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(32));
             } else {
@@ -76,12 +86,23 @@ int main(int argc, char* argv[])
 
     // 检查状态
     int secs = 0;
+    char unit_desc[][4] = {"B", "KB", "MB", "GB", "TB"};
+    size_t unit_devi[] = {1ULL, 1ULL<< 10, 1ULL<< 20, 1ULL<< 30, 1ULL<< 40};
+    size_t unit_index = 0;
+
     while (true) {
         ++ secs;
         std::chrono::seconds dura( 60 );
         std::this_thread::sleep_for( dura );
-        std::cout<< "[ RUNNING  ] NO."<< secs<< " second(s)"<< std::endl<<
-            "[ RUNNING  ] send("<< sum_send_times << " times, "<< sum_send_len << " Bytes) "<<
+
+        while ( sum_send_len / unit_devi[unit_index] > 1024 && unit_index < sizeof(unit_devi) / sizeof(size_t) - 1)
+            ++ unit_index;
+
+        while ( sum_send_len / unit_devi[unit_index] <= 1024 && unit_index > 0)
+            -- unit_index;
+
+        std::cout<< "[ RUNNING  ] NO."<< secs<< " m"<< std::endl<<
+            "[ RUNNING  ] send("<< sum_send_times << " times, "<< (sum_send_len / unit_devi[unit_index]) << " "<< unit_desc[unit_index]<<") "<<
             "full "<< sum_send_full<< " times, err "<< sum_send_err<< " times"<<
             std::endl<< std::endl;
     }

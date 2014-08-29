@@ -10,9 +10,15 @@ typedef enum {
 
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
 
-    EN_ATBUS_ERR_NODE_BAD_BLOCK             = -201,// 发现写坏的数据块
+    EN_ATBUS_ERR_NODE_BAD_BLOCK_FAST_CHECK  = -201,// 发现写坏的数据块 - 数据校验不通过
+    EN_ATBUS_ERR_NODE_BAD_BLOCK_NODE_NUM    = -202,// 发现写坏的数据块 - 节点数量错误
+    EN_ATBUS_ERR_NODE_BAD_BLOCK_BUFF_SIZE   = -203,// 发现写坏的数据块 - 节点数量错误
+    EN_ATBUS_ERR_NODE_BAD_BLOCK_SEQ_ID      = -204,// 发现写坏的数据块 - 操作序列错误
 
-    EN_ATBUS_ERR_SHM_GET_FAILED             = -301,// 发现写坏的数据块
+    EN_ATBUS_ERR_NODE_TIMEOUT               = -211,// 操作超时
+
+
+    EN_ATBUS_ERR_SHM_GET_FAILED             = -301,// 连接共享内存出错，具体错误原因可以查看errno或类似的位置
 
 } ATBUS_ERROR_TYPE;
 

@@ -32,10 +32,11 @@ CASE_TEST(channel, mem_siso)
     char buf_group2[2][45] = {0};
     char buf_group3[2][133] = {0};
     char buf_group4[2][605] = {0};
-    size_t len_group[] = {32, 45, 133, 605};
+    char buf_group5[2][1024] = {0};
+    size_t len_group[] = {32, 45, 133, 605, 1024};
     size_t group_num = sizeof(len_group) / sizeof(size_t);
-    char* buf_group[] = {buf_group1[0], buf_group2[0], buf_group3[0], buf_group4[0]};
-    char* buf_rgroup[] = {buf_group1[1], buf_group2[1], buf_group3[1], buf_group4[1]};
+    char* buf_group[] = {buf_group1[0], buf_group2[0], buf_group3[0], buf_group4[0], buf_group5[0]};
+    char* buf_rgroup[] = {buf_group1[1], buf_group2[1], buf_group3[1], buf_group4[1], buf_group5[1]};
 
     {
         size_t i = 0;
@@ -47,62 +48,74 @@ CASE_TEST(channel, mem_siso)
     }
 
     size_t send_sum_len;
-    // 单进程写压力
+    size_t try_left = 3;
+    srand(time(NULL));
+    size_t first_break = (size_t)rand() % (512 * 1024);
+
+    while (try_left -- > 0)
     {
-        size_t sum_len = 0, times = 0;
-        int res = 0;
-        size_t i = 0;
-        clock_t bt = clock();
-        while (0 == res) {
-            res = mem_send(channel, buf_group[i], len_group[i]);
-            if (!res) {
-                sum_len += len_group[i];
-                ++ times;
+        // 单进程写压力
+        {
+            size_t sum_len = 0, times = 0;
+            int res = 0;
+            size_t i = 0;
+            clock_t bt = clock();
+            while (0 == res) {
+                if (first_break && 0 == --first_break) {
+                    res = EN_ATBUS_ERR_BUFF_LIMIT;
+                    continue;
+                }
+
+                res = mem_send(channel, buf_group[i], len_group[i]);
+                if (!res) {
+                    sum_len += len_group[i];
+                    ++ times;
+                }
+
+                i = (i + 1) % group_num;
             }
+            clock_t et = clock();
 
-            i = (i + 1) % group_num;
+            CASE_EXPECT_EQ(EN_ATBUS_ERR_BUFF_LIMIT, res);
+
+            std::cout<< "[ RUNNING  ] send "<< sum_len<< " bytes("<< times<< " times) in "<< ((et - bt) / (CLOCKS_PER_SEC / 1000))<< "ms"<< std::endl;
+            send_sum_len = sum_len;
         }
-        clock_t et = clock();
 
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_BUFF_LIMIT, res);
+        size_t recv_sum_len;
+        // 单进程读压力
+        {
+            size_t sum_len = 0, times = 0;
+            int res = 0;
+            size_t i = 0;
+            clock_t bt = clock();
+            while (0 == res) {
+                size_t len;
+                res = mem_recv(channel, buf_rgroup[i], len_group[i], &len);
+                if (0 == res) {
+                    CASE_EXPECT_EQ(len, len_group[i]);
+                    sum_len += len_group[i];
+                    ++ times;
+                }
 
-        std::cout<< "[ RUNNING  ] send "<< sum_len<< " bytes("<< times<< " times) in "<< ((et - bt) / (CLOCKS_PER_SEC / 1000))<< "ms"<< std::endl;
-        send_sum_len = sum_len;
-    }
-
-    size_t recv_sum_len;
-    // 单进程读压力
-    {
-        size_t sum_len = 0, times = 0;
-        int res = 0;
-        size_t i = 0;
-        clock_t bt = clock();
-        while (0 == res) {
-            size_t len;
-            res = mem_recv(channel, buf_rgroup[i], len_group[i], &len);
-            if (0 == res) {
-                CASE_EXPECT_EQ(len, len_group[i]);
-                sum_len += len_group[i];
-                ++ times;
+                i = (i + 1) % group_num;
             }
+            clock_t et = clock();
 
-            i = (i + 1) % group_num;
+            CASE_EXPECT_EQ(EN_ATBUS_ERR_NO_DATA, res);
+            std::cout<< "[ RUNNING  ] recv "<< sum_len<< " bytes("<< times<< " times) in "<< ((et - bt) / (CLOCKS_PER_SEC / 1000))<< "ms"<< std::endl;
+            recv_sum_len = sum_len;
         }
-        clock_t et = clock();
 
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_NO_DATA, res);
-        std::cout<< "[ RUNNING  ] recv "<< sum_len<< " bytes("<< times<< " times) in "<< ((et - bt) / (CLOCKS_PER_SEC / 1000))<< "ms"<< std::endl;
-        recv_sum_len = sum_len;
-    }
-
-    // 简单数据校验
-    {
-        for (size_t i = 0; i < group_num; ++ i) {
-            CASE_EXPECT_EQ(0, memcmp(buf_group[i], buf_rgroup[i], len_group[i]));
+        // 简单数据校验
+        {
+            for (size_t i = 0; i < group_num; ++ i) {
+                CASE_EXPECT_EQ(0, memcmp(buf_group[i], buf_rgroup[i], len_group[i]));
+            }
         }
-    }
 
-    CASE_EXPECT_EQ(recv_sum_len, send_sum_len);
+        CASE_EXPECT_EQ(recv_sum_len, send_sum_len);
+    }
 
     delete []buffer;
 }
@@ -184,7 +197,8 @@ CASE_TEST(channel, mem_miso)
                     std::this_thread::yield();
                     -- read_failcount;
                 } else {
-                    CASE_EXPECT_EQ(EN_ATBUS_ERR_NODE_BAD_BLOCK, res);
+                    CASE_EXPECT_LE(EN_ATBUS_ERR_NODE_BAD_BLOCK_SEQ_ID, res);
+                    CASE_EXPECT_GE(EN_ATBUS_ERR_NODE_BAD_BLOCK_FAST_CHECK, res);
                     ++ sum_recv_err;
                 }
             } else {
