@@ -13,7 +13,8 @@ typedef enum {
     EN_ATBUS_ERR_NODE_BAD_BLOCK_FAST_CHECK  = -201,// 发现写坏的数据块 - 数据校验不通过
     EN_ATBUS_ERR_NODE_BAD_BLOCK_NODE_NUM    = -202,// 发现写坏的数据块 - 节点数量错误
     EN_ATBUS_ERR_NODE_BAD_BLOCK_BUFF_SIZE   = -203,// 发现写坏的数据块 - 节点数量错误
-    EN_ATBUS_ERR_NODE_BAD_BLOCK_SEQ_ID      = -204,// 发现写坏的数据块 - 操作序列错误
+    EN_ATBUS_ERR_NODE_BAD_BLOCK_WSEQ_ID     = -204,// 发现写坏的数据块 - 写操作序列错误
+    EN_ATBUS_ERR_NODE_BAD_BLOCK_CSEQ_ID     = -205,// 发现写坏的数据块 - 检查操作序列错误
 
     EN_ATBUS_ERR_NODE_TIMEOUT               = -211,// 操作超时
 

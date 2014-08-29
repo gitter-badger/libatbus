@@ -426,7 +426,7 @@ namespace atbus {
                     // 写数据node出现冲突
                     if (this_node_head->operation_seq) {
                         this_node_head->flag = set_flag(this_node_head->flag, MF_WRITEN);
-                        return EN_ATBUS_ERR_NODE_BAD_BLOCK_SEQ_ID;
+                        return EN_ATBUS_ERR_NODE_BAD_BLOCK_WSEQ_ID;
                     }
 
                     this_node_head->operation_seq = opr_seq;
@@ -456,7 +456,7 @@ namespace atbus {
 
                 // 再检查一次，以防memcpy时发生写冲突
                 if (opr_seq != first_node_head->operation_seq) {
-                    return EN_ATBUS_ERR_NODE_BAD_BLOCK_SEQ_ID;
+                    return EN_ATBUS_ERR_NODE_BAD_BLOCK_CSEQ_ID;
                 }
             }
 
@@ -517,7 +517,6 @@ namespace atbus {
                         ++ channel->block_timeout_count;
 
                         channel->first_failed_writing_time = 0;
-                        ret = ret? ret: EN_ATBUS_ERR_NODE_TIMEOUT;
                         continue;
                     }
 

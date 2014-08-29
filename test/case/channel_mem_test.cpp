@@ -197,7 +197,7 @@ CASE_TEST(channel, mem_miso)
                     std::this_thread::yield();
                     -- read_failcount;
                 } else {
-                    CASE_EXPECT_LE(EN_ATBUS_ERR_NODE_BAD_BLOCK_SEQ_ID, res);
+                    CASE_EXPECT_LE(EN_ATBUS_ERR_NODE_BAD_BLOCK_CSEQ_ID, res);
                     CASE_EXPECT_GE(EN_ATBUS_ERR_NODE_BAD_BLOCK_FAST_CHECK, res);
                     ++ sum_recv_err;
                 }
