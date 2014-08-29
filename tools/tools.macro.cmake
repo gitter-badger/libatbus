@@ -1,0 +1,5 @@
+# =========== tools =========== 
+set (PROJECT_TOOLS_BAS_DIR "${PROJECT_SOURCE_DIR}/tools")
+set (PROJECT_TOOLS_INC_DIR "${PROJECT_TOOLS_BAS_DIR}")
+set (PROJECT_TOOLS_SRC_DIR "${PROJECT_TOOLS_BAS_DIR}")
+

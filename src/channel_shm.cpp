@@ -24,11 +24,11 @@
 namespace atbus {
     namespace channel {
 
-        typedef struct {
-        } shm_channel;
+        struct shm_channel {
+        };
 
-        typedef struct {
-        } shm_conf;
+        struct shm_conf {
+        };
 
         typedef union {
             shm_channel* shm;
@@ -98,10 +98,13 @@ namespace atbus {
                 return ret;
 
             ret = mem_attach(buffer, real_size, &channel_s.mem, conf_s.mem);
+            if(ret < 0)
+                return ret;
+
             if (channel)
                 *channel = channel_s.shm;
 
-            return EN_ATBUS_ERR_SUCCESS;
+            return ret;
         }
 
         int shm_init(key_t shm_key, size_t len, shm_channel** channel, const shm_conf* conf) {
@@ -116,10 +119,13 @@ namespace atbus {
                 return ret;
 
             ret = mem_init(buffer, real_size, &channel_s.mem, conf_s.mem);
+            if(ret < 0)
+                return ret;
+
             if (channel)
                 *channel = channel_s.shm;
 
-            return EN_ATBUS_ERR_SUCCESS;
+            return ret;
         }
 
         int shm_send(shm_channel* channel, const void* buf, size_t len) {
