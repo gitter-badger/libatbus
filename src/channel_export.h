@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <cstddef>
 #include <utility>
+#include <ostream>
 
 #ifdef __unix__
 #include <sys/ipc.h>
@@ -34,6 +35,7 @@ namespace atbus {
         extern int mem_send(mem_channel* channel, const void* buf, size_t len);
         extern int mem_recv(mem_channel* channel, void* buf, size_t len, size_t* recv_size);
         extern std::pair<size_t, size_t> mem_last_action();
+        extern void mem_show_channel(mem_channel* channel, std::ostream& out, bool need_node_status, size_t need_node_data);
 
         struct shm_channel;
         struct shm_conf;
@@ -42,6 +44,7 @@ namespace atbus {
         extern int shm_send(shm_channel* channel, const void* buf, size_t len);
         extern int shm_recv(shm_channel* channel, void* buf, size_t len, size_t* recv_size);
         extern std::pair<size_t, size_t> shm_last_action();
+        extern void shm_show_channel(shm_channel* channel, std::ostream& out, bool need_node_status, size_t need_node_data);
     }
 }
 

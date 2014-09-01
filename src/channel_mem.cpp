@@ -5,6 +5,8 @@
  */
 
 #include <cstdio>
+#include <iostream>
+#include <iomanip>
 #include <assert.h>
 #include <ctime>
 #include <stdint.h>
@@ -425,10 +427,10 @@ namespace atbus {
 
                     // 写数据node出现冲突
                     if (this_node_head->operation_seq) {
-                        this_node_head->flag = set_flag(this_node_head->flag, MF_WRITEN);
                         return EN_ATBUS_ERR_NODE_BAD_BLOCK_WSEQ_ID;
                     }
 
+                    this_node_head->flag = set_flag(this_node_head->flag, MF_WRITEN);
                     this_node_head->operation_seq = opr_seq;
                 }
             }
@@ -628,6 +630,78 @@ namespace atbus {
 
         std::pair<size_t, size_t> mem_last_action() {
             return std::make_pair(detail::last_action_channel_begin_node_index, detail::last_action_channel_end_node_index);
+        }
+
+        void mem_show_channel(mem_channel* channel, std::ostream& out, bool need_node_status, size_t need_node_data) {
+            if (NULL == channel) {
+                return;
+            }
+
+            size_t read_cur = channel->atomic_read_cur.load();
+            size_t write_cur = channel->atomic_write_cur.load();
+            size_t available_node = (read_cur + channel->node_count - write_cur - 1) % channel->node_count;
+
+            out<< "summary:"<< std::endl<<
+               "channel node size: "<< channel->node_size<< std::endl<<
+               "channel node count: "<< channel->node_count<< std::endl<<
+               "channel using memory size: "<< (channel->area_end_offset - channel->area_channel_offset)<< std::endl<<
+               "channel available node number: "<< available_node<< std::endl<<
+               std::endl;
+
+            out<< "configure:"<< std::endl<<
+               "send timeout(ms): "<< channel->conf.conf_send_timeout_ms<< std::endl<<
+               "protect memory size(Bytes): "<< channel->conf.protect_memory_size<< std::endl<<
+               "protect node number: "<< channel->conf.protect_node_count<< std::endl<<
+               std::endl;
+
+            out<< "read&write:"<< std::endl<<
+               "first waiting time: "<< channel->first_failed_writing_time<< std::endl<<
+               "read index: "<< read_cur<< std::endl<<
+               "write index: "<< write_cur<< std::endl<<
+               "operation sequence: "<< channel->atomic_operation_seq<< std::endl<<
+               std::endl;
+
+            out<< "stat:"<< std::endl<<
+               "bad block count: "<< channel->block_bad_count<< std::endl<<
+               "bad node count: "<< channel->node_bad_count<< std::endl<<
+               "timeout block count: "<< channel->block_timeout_count<< std::endl<<
+               std::endl;
+
+            if (need_node_status) {
+                out<< std::endl<< "node head list:"<< std::endl;
+                for (size_t i = 0; i < channel->node_count; ++ i) {
+                    void* data_ptr = 0;
+                    mem_node_head* node_head = mem_get_node_head(channel, i, &data_ptr, NULL);
+                    bool start_node = check_flag(node_head->flag, MF_START_NODE);
+
+                    out<< "Node index: "<< std::setw(10)<< i<< " => seq="<< node_head->operation_seq<<
+                        ", is start node="<< (start_node? "Yes": " No")<<
+                        ", is written="<< (check_flag(node_head->flag, MF_WRITEN)? "Yes": " No")<<
+                        ", data(Hex): ";
+
+                    size_t data_len = channel->node_size;
+                    if (start_node) {
+                        data_len -= sizeof(mem_block::block_head_size);
+                        mem_get_block_head(channel, i, &data_ptr, NULL);
+                    }
+
+                    unsigned char* data_c = (unsigned char*)data_ptr;
+                    char data_buf[4] = {0};
+                    for (size_t j = 0; data_c && j < data_len && j < need_node_data; ++ j) {
+                        sprintf(data_buf, "%02x", data_c[j]);
+                        out<< data_buf;
+                    }
+                    out<<std::endl;
+                }
+                out<< std::resetiosflags;
+            }
+
+            out<< "read&write:"<< std::endl<<
+               "first waiting time: "<< channel->first_failed_writing_time<< std::endl<<
+               "read index: "<< channel->atomic_read_cur<< std::endl<<
+               "write index: "<< channel->atomic_write_cur<< std::endl<<
+               "operation sequence: "<< channel->atomic_operation_seq<< std::endl<<
+               std::endl;
         }
     }
 }

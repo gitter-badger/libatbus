@@ -56,6 +56,7 @@ int main(int argc, char* argv[])
 
         while(true) {
             size_t n = rand() % max_n; // 最大 4K-8K的包
+            if (0 == n) n = 1; // 保证一定有数据包，保证收发次数一致
             ++ sum_seq;
 
             for (size_t i = 0; i < n; ++ i) {

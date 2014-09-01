@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -150,21 +151,30 @@ CASE_TEST(channel, mem_miso)
     size_t sum_recv_times = 0;
     size_t sum_recv_err = 0;
 
-    // 创建四个写线程
-    const size_t wn = 4;
+    // 创建6个写线程
+    const size_t wn = 6;
     std::thread* write_threads[wn];
     for (size_t i = 0; i < wn; ++ i) {
         write_threads[i] = new std::thread([&]{
             size_t buf_pool[1024];
+            size_t seq_head = sum_seq.fetch_add(1);
+            size_t head_offset = sizeof(size_t) * 6;
+            size_t head_len = sizeof(size_t) * 2;
+            seq_head <<= head_offset;
+
+            size_t seq_body = 0;
 
             while(left_sec > 0) {
                 size_t n = rand() % 1024; // 最大 4K-8K的包
-                //size_t n = 16;
-                size_t seq = sum_seq.fetch_add(1);
+                if (0 == n) n = 1; /** 去除0字节包，保证顺序 **/
+
+                size_t seq = seq_body | seq_head;
                 for (size_t i = 0; i < n; ++ i) {
                     buf_pool[i] = seq;
                 }
 
+                //std::this_thread::sleep_for(std::chrono::milliseconds(800));
+                //std::cout<< "[ RUNNING  ] seq_head="<< seq_head<< ", seq_body="<< seq_body<< std::endl;
                 int res = mem_send(channel, buf_pool, n * sizeof(size_t));
 
                 if (res) {
@@ -173,10 +183,15 @@ CASE_TEST(channel, mem_miso)
                     } else {
                         ++ sum_send_err;
                     }
+
                     std::this_thread::yield();
                 } else {
                     ++ sum_send_times;
                     sum_send_len += n * sizeof(size_t);
+
+                    ++ seq_body;
+                    seq_body <<= head_len;
+                    seq_body >>= head_len;
                 }
             }
         });
@@ -188,9 +203,14 @@ CASE_TEST(channel, mem_miso)
         size_t buff_recv[1024]; // 最大 4K-8K的包
         int read_failcount = 10;
 
+        size_t head_offset = sizeof(size_t) * 6;
+        size_t head_len = sizeof(size_t) * 2;
+        size_t data_seq[16] = {0};
+        //bool dump_flag = true;
+
         while(read_failcount >= 0) {
             size_t len = 0;
-            // std::this_thread::sleep_for( std::chrono::milliseconds( 1000 ) );
+            //std::this_thread::sleep_for( std::chrono::milliseconds( 500 ) );
             int res = mem_recv(channel, buff_recv, sizeof(buff_recv), &len);
             if (res) {
                 if (EN_ATBUS_ERR_NO_DATA == res) {
@@ -209,11 +229,29 @@ CASE_TEST(channel, mem_miso)
                 len /= sizeof(size_t);
 
 
-                for (size_t i = 1; i < len; ++ i) {
-                    bool flag = buff_recv[i] == buff_recv[0];
-                    CASE_EXPECT_EQ(buff_recv[i], buff_recv[0]);
-                    if (!flag) {
-                        break;
+                if (len > 0) {
+                    size_t rdh = buff_recv[0] >> head_offset;
+                    size_t rdd = (buff_recv[0] << head_len) >> head_len;
+                    CASE_EXPECT_EQ(data_seq[rdh], rdd);
+
+                    if (data_seq[rdh] != rdd) {
+                        std::pair<size_t, size_t> last_action = mem_last_action();
+
+                        std::cout<< "[ RUNNING  ] rdh="<< rdh<< ", data_seq[rdh]="<< data_seq[rdh]<< ", rdd="<< rdd<<
+                            ", start index="<< last_action.first<< ", end index="<< last_action.second<<
+                            std::endl;
+                    }
+
+                    data_seq[rdh] = rdd + 1;
+                    data_seq[rdh] <<= head_len;
+                    data_seq[rdh] >>= head_len;
+
+                    for (size_t i = 1; i < len; ++ i) {
+                        bool flag = buff_recv[i] == buff_recv[0];
+                        CASE_EXPECT_EQ(buff_recv[i], buff_recv[0]);
+                        if (!flag) {
+                            break;
+                        }
                     }
                 }
 

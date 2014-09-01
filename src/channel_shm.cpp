@@ -143,5 +143,11 @@ namespace atbus {
         std::pair<size_t, size_t> shm_last_action() {
             return mem_last_action();
         }
+
+        void shm_show_channel(shm_channel* channel, std::ostream& out, bool need_node_status, size_t need_node_data) {
+            shm_channel_switcher switcher;
+            switcher.shm = channel;
+            mem_show_channel(switcher.mem, out, need_node_status, need_node_data);
+        }
     }
 }
