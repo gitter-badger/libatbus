@@ -45,6 +45,7 @@ namespace atbus {
             size_t protect_memory_size;
             uint64_t conf_send_timeout_ms;
 
+            size_t write_retry_times;
             // TODO 接收端校验号(用于保证只有一个接收者)
             volatile std::atomic<size_t> atomic_recver_identify;
         } mem_conf;
@@ -165,13 +166,14 @@ namespace atbus {
         static void mem_default_conf(mem_channel * channel) {
             assert(channel);
 
-            channel->conf.conf_send_timeout_ms = 1;
+            channel->conf.conf_send_timeout_ms = 4;
+            channel->conf.write_retry_times = 4; // 默认写序列错误重试4次
 
-            // 默认留1%的数据块用于保护缓冲区
+            // 默认留1/128的数据块用于保护缓冲区
             if (!channel->conf.protect_node_count && channel->conf.protect_memory_size) {
                 channel->conf.protect_node_count = (channel->conf.protect_memory_size + mem_block::node_data_size - 1) / mem_block::node_data_size;
             } else if (!channel->conf.protect_node_count) {
-                channel->conf.protect_node_count = channel->node_count / 100;
+                channel->conf.protect_node_count = channel->node_count >> 7;
             }
 
             if (channel->conf.protect_node_count > channel->node_count)
@@ -258,6 +260,7 @@ namespace atbus {
 
         static uint32_t mem_fetch_operation_seq(mem_channel* channel) {
             uint32_t ret = std::atomic_load(&channel->atomic_operation_seq);
+            std::atomic_thread_fence(std::memory_order_seq_cst);
             bool f = false;
             while(!f) {
                 // CAS
@@ -358,7 +361,7 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int mem_send(mem_channel* channel, const void* buf, size_t len) {
+        static int mem_send_real(mem_channel* channel, const void* buf, size_t len) {
             // 用于调试的节点编号信息
             detail::last_action_channel_begin_node_index = std::numeric_limits<size_t>::max();
             detail::last_action_channel_end_node_index = std::numeric_limits<size_t>::max();
@@ -383,6 +386,7 @@ namespace atbus {
 
             while(true) {
                 read_cur = std::atomic_load(&channel->atomic_read_cur);
+                std::atomic_thread_fence(std::memory_order_seq_cst);
 
                 // 要留下一个node做tail, 所以多减1
                 size_t available_node = (read_cur + channel->node_count - write_cur - 1) % channel->node_count;
@@ -465,6 +469,25 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
+        int mem_send(mem_channel* channel, const void* buf, size_t len) {
+            if (NULL == channel)
+                return EN_ATBUS_ERR_PARAMS;
+
+            int ret = 0;
+            size_t left_try_times = channel->conf.write_retry_times;
+            while (left_try_times -- > 0) {
+                int ret = mem_send_real(channel, buf, len);
+
+                // 原子操作序列冲突，重试
+                if (EN_ATBUS_ERR_NODE_BAD_BLOCK_CSEQ_ID == ret || EN_ATBUS_ERR_NODE_BAD_BLOCK_WSEQ_ID == ret)
+                    continue;
+
+                return ret;
+            }
+
+            return ret;
+        }
+
         int mem_recv(mem_channel* channel, void* buf, size_t len, size_t* recv_size) {
             // 用于调试的节点编号信息
             detail::last_action_channel_begin_node_index = std::numeric_limits<size_t>::max();
@@ -482,6 +505,7 @@ namespace atbus {
             size_t ori_read_cur = read_begin_cur;
             size_t read_end_cur;
             size_t write_cur = std::atomic_load(&channel->atomic_write_cur);
+            std::atomic_thread_fence(std::memory_order_seq_cst);
 
             while(true) {
                 read_end_cur = read_begin_cur;
@@ -621,6 +645,7 @@ namespace atbus {
 
             // 设置游标
             std::atomic_store(&channel->atomic_read_cur, read_end_cur);
+            std::atomic_thread_fence(std::memory_order_seq_cst);
 
             // 用于调试的节点编号信息
             detail::last_action_channel_begin_node_index = ori_read_cur;
@@ -652,6 +677,7 @@ namespace atbus {
                "send timeout(ms): "<< channel->conf.conf_send_timeout_ms<< std::endl<<
                "protect memory size(Bytes): "<< channel->conf.protect_memory_size<< std::endl<<
                "protect node number: "<< channel->conf.protect_node_count<< std::endl<<
+               "write retry times: "<< channel->conf.write_retry_times<< std::endl<<
                std::endl;
 
             out<< "read&write:"<< std::endl<<

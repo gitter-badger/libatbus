@@ -9,6 +9,8 @@
 #include <thread>
 #include <chrono>
 #include <functional>
+#include <limits>
+#include <numeric>
 
 #include <detail/libatbus_error.h>
 #include "channel_export.h"
@@ -17,7 +19,7 @@
 int main(int argc, char* argv[])
 {
     if (argc < 2) {
-        printf("usage: %s <shm key> [max unit size] [shm size]\n", argv[0]);
+        printf("usage: %s <shm key> [max unit size] [sleep every n sends] [shm size]\n", argv[0]);
         return 0;
     }
 
@@ -26,9 +28,13 @@ int main(int argc, char* argv[])
     if (argc > 2)
         max_n = (size_t)strtol(argv[2], NULL, 10) / sizeof(size_t);
 
-    size_t buffer_len = 64 * 1024 * 1024; // 64MB
+    size_t sleep_times = std::numeric_limits<size_t>::max();
     if (argc > 3)
-        buffer_len = (size_t)strtol(argv[3], NULL, 10);
+        sleep_times = (size_t)strtol(argv[3], NULL, 10);
+
+    size_t buffer_len = 64 * 1024 * 1024; // 64MB
+    if (argc > 4)
+        buffer_len = (size_t)strtol(argv[4], NULL, 10);
 
     char* buffer = new char[buffer_len];
 
@@ -53,6 +59,7 @@ int main(int argc, char* argv[])
     std::thread* write_threads;
     write_threads = new std::thread([&]{
         size_t buf_pool[max_n];
+        size_t left_sleep_count = sleep_times;
 
         while(true) {
             size_t n = rand() % max_n; // 最大 4K-8K的包
@@ -80,6 +87,13 @@ int main(int argc, char* argv[])
             } else {
                 ++ sum_send_times;
                 sum_send_len += n * sizeof(size_t);
+            }
+
+            if (0 == left_sleep_count) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(8));
+                left_sleep_count = sleep_times;
+            } else {
+                -- left_sleep_count;
             }
         }
     });
