@@ -273,7 +273,7 @@ CASE_TEST(channel, mem_miso)
                 "[ RUNNING 2] recv("<< sum_recv_times<< " times, "<< sum_recv_len << " Bytes) err "<<
                 sum_recv_err<< " times"<< std::endl<<
                 "[ RUNNING 3] send("<< sum_send_times << " times, "<< sum_send_len << " Bytes) "<<
-                "full "<< sum_send_times<< " times, err "<< sum_send_err<< " times"<< std::endl;
+                "full "<< sum_send_full<< " times, err "<< sum_send_err<< " times"<< std::endl;
 
         } while (left_sec >= 0);
     }
