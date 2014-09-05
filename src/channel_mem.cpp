@@ -260,7 +260,7 @@ namespace atbus {
 
         static uint32_t mem_fetch_operation_seq(mem_channel* channel) {
             uint32_t ret = std::atomic_load(&channel->atomic_operation_seq);
-            std::atomic_thread_fence(std::memory_order_seq_cst);
+            //std::atomic_thread_fence(std::memory_order_seq_cst);
             bool f = false;
             while(!f) {
                 // CAS
@@ -386,7 +386,7 @@ namespace atbus {
 
             while(true) {
                 read_cur = std::atomic_load(&channel->atomic_read_cur);
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                //std::atomic_thread_fence(std::memory_order_seq_cst);
 
                 // 要留下一个node做tail, 所以多减1
                 size_t available_node = (read_cur + channel->node_count - write_cur - 1) % channel->node_count;
@@ -505,7 +505,7 @@ namespace atbus {
             size_t ori_read_cur = read_begin_cur;
             size_t read_end_cur;
             size_t write_cur = std::atomic_load(&channel->atomic_write_cur);
-            std::atomic_thread_fence(std::memory_order_seq_cst);
+            //std::atomic_thread_fence(std::memory_order_seq_cst);
 
             while(true) {
                 read_end_cur = read_begin_cur;
@@ -645,7 +645,7 @@ namespace atbus {
 
             // 设置游标
             std::atomic_store(&channel->atomic_read_cur, read_end_cur);
-            std::atomic_thread_fence(std::memory_order_seq_cst);
+            //std::atomic_thread_fence(std::memory_order_seq_cst);
 
             // 用于调试的节点编号信息
             detail::last_action_channel_begin_node_index = ori_read_cur;
