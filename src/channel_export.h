@@ -41,6 +41,7 @@ namespace atbus {
         struct shm_conf;
         extern int shm_attach(key_t shm_key, size_t len, shm_channel** channel, const shm_conf* conf);
         extern int shm_init(key_t shm_key, size_t len, shm_channel** channel, const shm_conf* conf);
+        extern int shm_close(key_t shm_key);
         extern int shm_send(shm_channel* channel, const void* buf, size_t len);
         extern int shm_recv(shm_channel* channel, void* buf, size_t len, size_t* recv_size);
         extern std::pair<size_t, size_t> shm_last_action();

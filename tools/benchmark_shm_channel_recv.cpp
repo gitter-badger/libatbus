@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     // 创建读线程
     std::thread* read_threads;
     read_threads = new std::thread([&]{
-        size_t buf_pool[max_n];
+        size_t* buf_pool = new size_t[max_n];
 
         while(true) {
             size_t n = 0; // 最大 4K-8K的包
@@ -80,6 +80,8 @@ int main(int argc, char* argv[])
                 }
             }
         }
+
+        delete []buf_pool;
     });
 
 
