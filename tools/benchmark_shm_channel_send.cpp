@@ -64,7 +64,6 @@ int main(int argc, char* argv[])
         while(true) {
             size_t n = rand() % max_n; // 最大 4K-8K的包
             if (0 == n) n = 1; // 保证一定有数据包，保证收发次数一致
-            ++ sum_seq;
 
             for (size_t i = 0; i < n; ++ i) {
                 buf_pool[i] = sum_seq;
@@ -87,6 +86,7 @@ int main(int argc, char* argv[])
             } else {
                 ++ sum_send_times;
                 sum_send_len += n * sizeof(size_t);
+                ++ sum_seq;
             }
 
             if (0 == left_sleep_count) {

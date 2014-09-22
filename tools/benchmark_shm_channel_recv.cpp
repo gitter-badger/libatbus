@@ -52,6 +52,7 @@ int main(int argc, char* argv[])
     std::thread* read_threads;
     read_threads = new std::thread([&]{
         size_t buf_pool[max_n];
+        std::map<size_t, int> val_check;
 
         while(true) {
             size_t n = 0; // 最大 4K-8K的包
@@ -78,6 +79,26 @@ int main(int argc, char* argv[])
                         break;
                     }
                 }
+
+                std::map<size_t, int>::iterator iter = val_check.find(buf_pool[0]);
+                if (val_check.end() == iter) {
+                    std::cerr<< "new data index "<< buf_pool[0]<< std::endl;
+                    std::cerr<< "all data index: ";
+                    for (std::map<size_t, int>::iterator i = val_check.begin(); i != val_check.end(); ++ i){
+                        std::cerr<< i->first<< ":"<< i->second<< ", ";
+                    }
+                    std::cerr<< std::endl;
+                } else {
+                    -- iter->second;
+                    if (iter->second <= 0)
+                        val_check.erase(iter);
+                }
+
+                iter = val_check.find(buf_pool[0] + 1);
+                if (val_check.end() == iter)
+                    val_check[buf_pool[0] + 1] = 1;
+                else
+                    ++ iter->second;
             }
         }
     });
