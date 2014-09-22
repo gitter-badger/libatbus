@@ -64,7 +64,7 @@ namespace atbus {
             volatile std::atomic<size_t> atomic_write_cur;  // std::atomic也是POD类型
 
             // 第一次读到正在写入数据的时间
-            uint32_t first_failed_writing_time;
+            uint64_t first_failed_writing_time;
 
             volatile std::atomic<uint32_t> atomic_operation_seq; // 操作序列号(用于保证只有一个接收者)
 
@@ -82,9 +82,9 @@ namespace atbus {
         } mem_channel;
 
         // 对齐头
-        typedef union {
+        typedef struct {
             mem_channel channel;
-            char align[4 * 1024]; // 对齐到4KB,用于以后拓展
+            char align[4 * 1024 - sizeof(mem_channel)]; // 对齐到4KB,用于以后拓展
         } mem_channel_head_align;
 
 
@@ -145,7 +145,7 @@ namespace atbus {
          * @param checked 检查项
          * @return 检查结果flag
          */
-        static inline uint32_t check_flag(uint32_t flag, MEM_FLAG checked) {
+        static inline bool check_flag(uint32_t flag, MEM_FLAG checked) {
             return flag & checked;
         }
 

@@ -20,6 +20,7 @@ typedef enum {
 
 
     EN_ATBUS_ERR_SHM_GET_FAILED             = -301,// 连接共享内存出错，具体错误原因可以查看errno或类似的位置
+    EN_ATBUS_ERR_SHM_NOT_FOUND              = -302,// 共享内存未找到
 
 } ATBUS_ERROR_TYPE;
 
