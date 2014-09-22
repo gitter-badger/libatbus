@@ -1,4 +1,4 @@
-#include <iostream>
+﻿#include <iostream>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     // 创建读线程
     std::thread* read_threads;
     read_threads = new std::thread([&]{
-        size_t buf_pool[max_n];
+        size_t* buf_pool = new size_t[max_n];
         std::map<size_t, int> val_check;
 
         while(true) {
@@ -101,6 +101,8 @@ int main(int argc, char* argv[])
                     ++ iter->second;
             }
         }
+
+        delete []buf_pool;
     });
 
 

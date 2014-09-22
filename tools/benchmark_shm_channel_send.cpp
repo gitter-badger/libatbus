@@ -1,4 +1,4 @@
-#include <iostream>
+﻿#include <iostream>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -15,6 +15,9 @@
 #include <detail/libatbus_error.h>
 #include "channel_export.h"
 
+#ifdef max
+#undef max
+#endif
 
 int main(int argc, char* argv[])
 {
@@ -53,12 +56,12 @@ int main(int argc, char* argv[])
     size_t sum_send_times = 0;
     size_t sum_send_full = 0;
     size_t sum_send_err = 0;
-    size_t sum_seq = ((size_t)random() << 32);
+    size_t sum_seq = ((size_t)rand() << 32);
 
     // 创建写线程
     std::thread* write_threads;
     write_threads = new std::thread([&]{
-        size_t buf_pool[max_n];
+        size_t* buf_pool = new size_t[max_n];
         size_t left_sleep_count = sleep_times;
 
         while(true) {
@@ -96,6 +99,8 @@ int main(int argc, char* argv[])
                 -- left_sleep_count;
             }
         }
+
+        delete []buf_pool;
     });
 
 
