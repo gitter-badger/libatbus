@@ -5,7 +5,9 @@ libatbus
 
 依赖
 ------
-工具依赖： 支持c++0x或c++11的编译器、cmake、flatbuffers（用于协议打解包）
+工具依赖： 支持c++0x或c++11的编译器、cmake、flatbuffers（用于协议打解包）、libuv（用于网络通道）
+
+> 如果本地未安装libuv，请clone 3rd_party/libuv 子模块
 
 
 Why not c?

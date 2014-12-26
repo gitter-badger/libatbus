@@ -9,6 +9,9 @@ set(ATBUS_MACRO_DATA_ALIGN_TYPE "uint64_t" CACHE STRING "atbus的内存内存块
 
 set(ATBUS_MACRO_HUGETLB_SIZE 4194304 CACHE STRING "大页表分页大小（用于优化共享内存分页）")
 
+# libuv选项
+set(LIBUV_ROOT "" CACHE STRING "libuv root directory")
+
 # 测试配置选项
 set(GTEST_ROOT "" CACHE STRING "GTest root directory")
 set(BOOST_ROOT "" CACHE STRING "Boost root directory")
