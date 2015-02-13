@@ -20,6 +20,14 @@
 
 #ifdef WIN32
 #include <Windows.h>
+#include "atlconv.h"
+
+#ifdef UNICODE
+#define ATBUS_VC_TEXT(x) A2W(x)
+#else
+#define ATBUS_VC_TEXT(x) x
+#endif
+
 #else 
 #include <unistd.h>
 #endif
@@ -95,6 +103,8 @@ namespace atbus {
             }
 
         #ifdef WIN32
+            USES_CONVERSION;
+
             SYSTEM_INFO si;
             ::GetSystemInfo(&si);
             size_t page_size = static_cast<std::size_t>(si.dwPageSize);
@@ -104,9 +114,10 @@ namespace atbus {
 
             // 首先尝试直接打开
             shm_record.handle = OpenFileMapping(
-                FILE_MAP_ALL_ACCESS,   // read/write access
-                FALSE,                 // do not inherit the name
-                shm_file_name);        // name of mapping object
+                FILE_MAP_ALL_ACCESS,        // read/write access
+                FALSE,                      // do not inherit the name
+                ATBUS_VC_TEXT(shm_file_name)// name of mapping object
+            );
             if (NULL != shm_record.handle) {
                 shm_record.buffer = (LPTSTR) MapViewOfFile(shm_record.handle,   // handle to map object
                     FILE_MAP_ALL_ACCESS, // read/write permission
@@ -133,12 +144,13 @@ namespace atbus {
                 return EN_ATBUS_ERR_SHM_GET_FAILED;
 
             shm_record.handle = CreateFileMapping(
-                INVALID_HANDLE_VALUE,    // use paging file
-                NULL,                    // default security
-                PAGE_READWRITE,          // read/write access
-                0,                       // maximum object size (high-order DWORD)
-                len,                     // maximum object size (low-order DWORD)
-                shm_file_name);          // name of mapping object
+                INVALID_HANDLE_VALUE,       // use paging file
+                NULL,                       // default security
+                PAGE_READWRITE,             // read/write access
+                0,                          // maximum object size (high-order DWORD)
+                len,                        // maximum object size (low-order DWORD)
+                ATBUS_VC_TEXT(shm_file_name)// name of mapping object
+            );
 
             if (NULL == shm_record.handle)
                 return EN_ATBUS_ERR_SHM_GET_FAILED;

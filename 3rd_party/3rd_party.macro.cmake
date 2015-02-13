@@ -11,14 +11,16 @@ if(NOT LIBUV_FOUND)
 		COMMAND git update "3rd_party/libuv"
 	)
     if(MSVC)
+		file(MAKE_DIRECTORY "${PROJECT_3RDPARTY_ROOT_DIR}/libuv/lib")
         if ( "Debug" STREQUAL "${CMAKE_BUILD_TYPE}")
             execute_process(
                 COMMAND "vcbuild.bat" debug
                 WORKING_DIRECTORY "${PROJECT_3RDPARTY_ROOT_DIR}/libuv"
             )
+			
             file(
                 COPY "${PROJECT_3RDPARTY_ROOT_DIR}/libuv/Debug/lib" 
-                DESTINATION "${PROJECT_3RDPARTY_ROOT_DIR}/libuv/"
+                DESTINATION "${PROJECT_3RDPARTY_ROOT_DIR}/libuv/lib"
                 USE_SOURCE_PERMISSIONS
             )
         else()
@@ -26,13 +28,15 @@ if(NOT LIBUV_FOUND)
                 COMMAND "vcbuild.bat" release
                 WORKING_DIRECTORY "${PROJECT_3RDPARTY_ROOT_DIR}/libuv"
             )
+			
             file(
                 COPY "${PROJECT_3RDPARTY_ROOT_DIR}/libuv/Release/lib" 
-                DESTINATION "${PROJECT_3RDPARTY_ROOT_DIR}/libuv/"
+                DESTINATION "${PROJECT_3RDPARTY_ROOT_DIR}/libuv/lib"
                 USE_SOURCE_PERMISSIONS
             )
         endif()
     else()
+        message(STATUS "${PROJECT_3RDPARTY_ROOT_DIR}/libuv")
         execute_process(
             COMMAND "./gyp_uv.py" "-f" "make"
             COMMAND make -C out
