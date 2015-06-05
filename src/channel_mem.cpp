@@ -19,6 +19,8 @@
 #include <numeric>
 
 #include <detail/libatbus_error.h>
+#include <detail/crc32.h>
+#include <detail/crc64.h>
 #include <detail/std/thread.h>
 
 #ifndef ATBUS_MACRO_DATA_NODE_SIZE
@@ -35,6 +37,24 @@ namespace atbus {
         namespace detail {
             THREAD_TLS size_t last_action_channel_end_node_index = 0;
             THREAD_TLS size_t last_action_channel_begin_node_index = 0;
+
+            template<bool is_crc64>
+            struct crc_factor;
+
+
+            template<>
+            struct crc_factor <false> {
+                static uint32_t crc(uint32_t crc, const void* s, size_t l) {
+                    return atbus::detail::crc32(crc, static_cast<const unsigned char*>(s), l);
+                }
+            };
+
+            template<>
+            struct crc_factor <true> {
+                static uint64_t crc(uint64_t crc, const void* s, size_t l) {
+                    return atbus::detail::crc64(crc, static_cast<const unsigned char*>(s), l);
+                }
+            };
         }
 
         typedef ATBUS_MACRO_DATA_ALIGN_TYPE data_align_type;
@@ -285,21 +305,10 @@ namespace atbus {
          * @brief 生成校验码
          * @param src 源数据
          * @param len 数据长度
-         * @note DJB Hash算法的简化变种，由于仅作校验码并不强调散列特性，故而简化操作以减少CPU消耗。
+         * @note CRC 循环冗余校验
          */
         static data_align_type mem_fast_check(const void* src, size_t len) {
-            data_align_type ret = static_cast<data_align_type>(0x1505150515051505ULL);
-            const size_t padding = sizeof(data_align_type) * 5;
-            const data_align_type* p = (const data_align_type*)(src);
-            while (len >= sizeof(data_align_type)) {
-                ret = ((ret << padding) + ret) + *p;
-                ++ p;
-                len -= sizeof(data_align_type);
-            }
-
-            data_align_type tail = 0;
-            memcpy(&tail, p, len);
-            return ((ret << padding) + ret) + tail;
+            return static_cast<data_align_type>(detail::crc_factor<sizeof(data_align_type) >= sizeof(uint64_t)>::crc(0, src, len));
         }
 
         // 对齐单位的大小必须是2的N次方
@@ -719,7 +728,6 @@ namespace atbus {
                     }
                     out<<std::endl;
                 }
-                out<< std::resetiosflags;
             }
 
             out<< "read&write:"<< std::endl<<

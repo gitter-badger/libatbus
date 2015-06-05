@@ -1,4 +1,7 @@
+#pragma once
 
+#ifndef LIBATBUS_DETAIL_LIBATBUS_ERROR_H_
+#define LIBATBUS_DETAIL_LIBATBUS_ERROR_H_
 
 typedef enum {
     EN_ATBUS_ERR_SUCCESS                    = 0,
@@ -24,3 +27,4 @@ typedef enum {
 
 } ATBUS_ERROR_TYPE;
 
+#endif
