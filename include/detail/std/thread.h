@@ -1,4 +1,4 @@
-/**
+﻿/**
 * @file thread.h
 * @brief 导入多线程特性支持兼容层
 * Licensed under the MIT licenses.
@@ -25,8 +25,10 @@
  * @see http://en.wikipedia.org/wiki/Thread-local_storage#C.2B.2B
  * @note 不支持 C++ Builder 编译器
  */
-
-#if defined(__clang__)
+#if defined(__ANDROID__)
+    // android 不支持tls 
+    #define THREAD_TLS
+#elif defined(__clang__)
     #define THREAD_TLS __thread
 #elif defined(__cplusplus) && __cplusplus >= 201103L
     #define THREAD_TLS thread_local
@@ -38,3 +40,4 @@
 #endif
 
 #endif
+

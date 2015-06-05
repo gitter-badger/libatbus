@@ -18,10 +18,10 @@
 #include <utility>
 #include <numeric>
 
-#include <detail/libatbus_error.h>
-#include <detail/crc32.h>
-#include <detail/crc64.h>
-#include <detail/std/thread.h>
+#include "detail/libatbus_error.h"
+#include "detail/crc32.h"
+#include "detail/crc64.h"
+#include "detail/std/thread.h"
 
 #ifndef ATBUS_MACRO_DATA_NODE_SIZE
 #define ATBUS_MACRO_DATA_NODE_SIZE 128
