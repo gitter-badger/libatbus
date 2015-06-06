@@ -16,12 +16,17 @@
 #include <utility>
 #include <ostream>
 
-#ifdef __unix__
-#include <sys/ipc.h>
-#include <sys/shm.h>
+#if defined(__ANDROID__) || defined(__IOS__)
+#elif defined(__unix__) || defined(__APPLE__)
+    #include <sys/ipc.h>
+    #include <sys/shm.h>
+    
+    #define ATBUS_CHANNEL_SHM 1
 #else
-#include <Windows.h>
-typedef long key_t;
+    #include <Windows.h>
+    typedef long key_t;
+    
+    #define ATBUS_CHANNEL_SHM 1
 #endif
 
 namespace atbus {
@@ -37,6 +42,7 @@ namespace atbus {
         extern std::pair<size_t, size_t> mem_last_action();
         extern void mem_show_channel(mem_channel* channel, std::ostream& out, bool need_node_status, size_t need_node_data);
 
+        #ifdef ATBUS_CHANNEL_SHM
         // shared memory channel
         struct shm_channel;
         struct shm_conf;
@@ -47,6 +53,7 @@ namespace atbus {
         extern int shm_recv(shm_channel* channel, void* buf, size_t len, size_t* recv_size);
         extern std::pair<size_t, size_t> shm_last_action();
         extern void shm_show_channel(shm_channel* channel, std::ostream& out, bool need_node_status, size_t need_node_data);
+        #endif
 
         // tcp socket channel
         //struct net_tcp_channel;

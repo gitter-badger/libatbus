@@ -14,7 +14,7 @@
 #include <atomic>
 #include <map>
 
-#include <detail/libatbus_error.h>
+#include "detail/libatbus_error.h"
 
 #include "channel_export.h"
 
@@ -31,6 +31,8 @@
 #else 
 #include <unistd.h>
 #endif
+
+#ifdef ATBUS_CHANNEL_SHM
 
 namespace atbus {
     namespace channel {
@@ -296,3 +298,5 @@ namespace atbus {
         }
     }
 }
+
+#endif
