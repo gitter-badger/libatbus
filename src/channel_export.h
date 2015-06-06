@@ -16,8 +16,15 @@
 #include <utility>
 #include <ostream>
 
-#if defined(__ANDROID__) || defined(__IOS__)
-#elif defined(__unix__) || defined(__APPLE__)
+#if defined(__ANDROID__)
+#elif defined(__APPLE__)
+    #if __dest_os == __mac_os_x
+        #include <sys/ipc.h>
+        #include <sys/shm.h>
+        
+        #define ATBUS_CHANNEL_SHM 1
+    #endif
+#elif defined(__unix__)
     #include <sys/ipc.h>
     #include <sys/shm.h>
     
