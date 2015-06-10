@@ -137,6 +137,7 @@ namespace atbus {
                 if (real_size)
                     *real_size = len;
 
+                shm_record.size = len;
                 shm_mapped_records[shm_key] = shm_record;
                 return EN_ATBUS_ERR_SUCCESS;
             }
