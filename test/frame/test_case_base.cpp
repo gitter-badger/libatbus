@@ -1,7 +1,7 @@
 ﻿/*
  * test_case_base.cpp
  *
- *  Created on: 2014年8月7日
+ *  Created on: 2014年3月11日
  *      Author: owent
  *
  *  Released under the MIT license
@@ -31,7 +31,7 @@ int test_case_base::run() {
     test_manager::me().success_counter_ptr = &success_;
     test_manager::me().failed_counter_ptr = &failed_;
 
-#ifndef PROJECT_TEST_MACRO_ENABLE_BOOST_TEST
+#ifndef UTILS_TEST_MACRO_TEST_ENABLE_BOOST_TEST
     if (NULL != func_) {
         (*func_)();
     }

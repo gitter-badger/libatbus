@@ -1,7 +1,7 @@
 ﻿/*
  * test_case_base.h
  *
- *  Created on: 2014年8月7日
+ *  Created on: 2014年3月11日
  *      Author: owent
  *
  *  Released under the MIT license
@@ -12,7 +12,7 @@
 
 #include <string>
 
-#ifdef PROJECT_TEST_MACRO_ENABLE_BOOST_TEST
+#ifdef UTILS_TEST_MACRO_TEST_ENABLE_BOOST_TEST
 #include <boost/test/unit_test.hpp>
 #endif
 

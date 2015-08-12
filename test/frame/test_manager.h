@@ -1,7 +1,7 @@
 ﻿/*
  * test_manager.h
  *
- *  Created on: 2014年8月7日
+ *  Created on: 2014年3月11日
  *      Author: owent
  *
  *  Released under the MIT license
@@ -41,7 +41,7 @@ public:
 
     static std::string get_expire_time(clock_t begin, clock_t end);
 
-#ifdef PROJECT_TEST_MACRO_ENABLE_BOOST_TEST
+#ifdef UTILS_TEST_MACRO_TEST_ENABLE_BOOST_TEST
     static boost::unit_test::test_suite*& test_suit();
 #endif
 

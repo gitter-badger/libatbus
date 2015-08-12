@@ -10,6 +10,7 @@ typedef enum {
     EN_ATBUS_ERR_INNER                      = -2,
     EN_ATBUS_ERR_NO_DATA                    = -3, // 无数据
     EN_ATBUS_ERR_BUFF_LIMIT                 = -4, // 缓冲区不足
+    EN_ATBUS_ERR_MALLOC                     = -5, // 分配失败
 
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
 

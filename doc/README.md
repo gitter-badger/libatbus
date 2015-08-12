@@ -161,6 +161,40 @@ typedef struct {
 5. 断开连接时需要能够通过析构逻辑释放所有缓冲区和待发送项，并且回调失败接口。
 6. 网络出现问题（包含超时、断开等）需要进行重连逻辑，但是重连逻辑需要有重试次数限制。立即重试失败则会有定时重试机制。
 7. 网络断开事件中要清理节点的连接信息。
+8. 如果数据很小能直接发掉，就直接发送（直接进入系统socket缓冲区），不需要过缓冲区（当然当前缓冲区必须为空）。发送接口防止多线程要加锁（先全加自旋锁，后面可以考虑抽空移植BOOST中对线程支持的判定，有多线程支持时加自旋锁）。
+
+```cpp
+// Sock通道状态
+struct sock_status_t {
+    enum type {
+        INIT = 0,
+        CONNECTING,
+        CONNECTED,
+    };
+};
+
+// Sock通道头
+typedef struct {
+    std::string host;           // 主机地址
+    uint16_t    port;           // 端口
+    int         fd;             // socket设备描述符/HANDLE
+    int         status;         // 状态
+
+    // 数据区域
+    buffer_manager write_buffers;     // 写数据缓冲区(两种Buffer管理方式，一种动态，一种静态)
+    buffer_manager read_buffers;      // 读数据缓冲区(两种Buffer管理方式，一种动态，一种静态)
+    
+    // 回调函数
+    connect_callback_t on_connect;
+    disconnect_callback_t on_disconnect;
+    recv_callback_t on_recv;
+    
+    // 统计信息
+    size_t block_bad_count; 	// 读取到坏块次数
+    size_t block_timeout_count; // 读取到写入超时块次数
+    size_t node_bad_count; 		// 读取到坏node次数
+} sock_channel;
+```
 
 ### 数据节点
 
@@ -168,8 +202,18 @@ typedef struct {
 
 数据节点的发送通道可以多种多样，但是KEY都是节点的ID。Value里包含连接信息，并且能根据连接信息来判定怎么建立连接或者如何发送数据。
 
+对单个数据节点的操作必须是单线程的。包含节点更新、获取、查找等。
+
 另外libatbus不规定通信模式（不像zeromq一样必须指定一种通信模式）。所以基本没有回包一说。但是因为存在网络延迟发送和发送过程，所以会出现发送失败的问题。
 
 然而，在最极端的条件下，即便TCP连接的底层接口返回发送成功，也不能保证对端能正确收到（因为是异步接口并且底层可能发送到一半连接断开并且重试失败），能保证的只是对方收到的情况下的顺序和内容。
-为了尽可能的抛出网络问题，我们在尝试重连的时候直接向上层返回错误。
+为了尽可能的抛出网络问题，调用发送接口时。我们在尝试重连的时候直接向上层直接返回错误。其他情况下， EAGAIN和EWOULDBLOCK、EINTR则直接重试，其他错误直接返回错误。
+
+连接协议使用类似zeromq的方式。具体实施规则如下:
+
++ TCP网络连接: tcp://IP或域名:端口
++ Unix Socket连接: unix://文件名路径 （如果是绝对路径，比如/tmp/atbus.sock的完整路径是 unit:///tmp/atbus.sock）
++ 共享内存连接: shm://共享内存Key
++ 堆内存连接: mem://名称
+
 
