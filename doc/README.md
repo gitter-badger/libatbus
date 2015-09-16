@@ -193,7 +193,7 @@ typedef struct {
     size_t block_bad_count; 	// 读取到坏块次数
     size_t block_timeout_count; // 读取到写入超时块次数
     size_t node_bad_count; 		// 读取到坏node次数
-} sock_channel;
+} io_stream_channel;
 ```
 
 ### 数据节点
@@ -211,7 +211,7 @@ typedef struct {
 
 连接协议使用类似zeromq的方式。具体实施规则如下:
 
-+ TCP网络连接: tcp://IP或域名:端口
++ TCP网络连接: ipv4://IP或域名:端口, ipv6://IP或域名:端口
 + Unix Socket连接: unix://文件名路径 （如果是绝对路径，比如/tmp/atbus.sock的完整路径是 unit:///tmp/atbus.sock）
 + 共享内存连接: shm://共享内存Key
 + 堆内存连接: mem://名称

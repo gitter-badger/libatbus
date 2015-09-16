@@ -16,7 +16,7 @@
 
 #include "detail/libatbus_error.h"
 
-#include "channel_export.h"
+#include "libatbus_channel_export.h"
 
 #ifdef WIN32
 #include <Windows.h>

@@ -11,7 +11,7 @@
 #include <functional>
 
 #include <detail/libatbus_error.h>
-#include "channel_export.h"
+#include "libatbus_channel_export.h"
 
 
 int main(int argc, char* argv[])

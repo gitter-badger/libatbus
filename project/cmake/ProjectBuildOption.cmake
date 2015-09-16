@@ -8,6 +8,7 @@ set(ATBUS_MACRO_DATA_NODE_SIZE 128 CACHE STRING "atbus的内存通道node大小�
 set(ATBUS_MACRO_DATA_ALIGN_TYPE "uint64_t" CACHE STRING "atbus的内存内存块对齐类型（用于优化memcpy和校验）")
 
 set(ATBUS_MACRO_HUGETLB_SIZE 4194304 CACHE STRING "大页表分页大小（用于优化共享内存分页）")
+set(ATBUS_MACRO_MSG_LIMIT 65536 CACHE STRING "默认的消息体大小限制")
 
 # libuv选项
 set(LIBUV_ROOT "" CACHE STRING "libuv root directory")

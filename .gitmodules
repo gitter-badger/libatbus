@@ -1,7 +1,0 @@
-[submodule "3rd_party/flatbuffers"]
-	path = 3rd_party/flatbuffers
-	url = https://github.com/google/flatbuffers
-[submodule "3rd_party/libuv"]
-	path = 3rd_party/libuv
-	url = https://github.com/libuv/libuv.git
-	branch = v1.x

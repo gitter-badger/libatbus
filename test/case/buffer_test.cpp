@@ -12,7 +12,7 @@
 #include <detail/libatbus_error.h>
 #include <detail/buffer.h>
 
-#include "channel_export.h"
+#include "detail/libatbus_channel_export.h"
 #include "frame/test_macros.h"
 
 CASE_TEST(buffer, varint)
