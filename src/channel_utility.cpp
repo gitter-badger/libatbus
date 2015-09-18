@@ -23,13 +23,28 @@ namespace atbus {
             size_t port_end = addr.address.find_last_of(":");
             addr.port = 0;
             if (addr.address.npos != port_end && port_end >= scheme_end + 3) {
-                ATBUS_FUNC_SSCANF(addr.address.c_str() + port_end + 1, "%u", &addr.port);
+                ATBUS_FUNC_SSCANF(addr.address.c_str() + port_end + 1, "%d", &addr.port);
             }
 
             // 截取域名
             addr.host = addr.address.substr(scheme_end + 3, (port_end == addr.address.npos) ? port_end : port_end - scheme_end - 3);
 
             return true;
+        }
+
+        void make_address(const char* scheme, const char* host, int port, channel_address_t& addr) {
+            addr.scheme = scheme;
+            addr.host = host;
+            addr.port = port;
+            addr.address.reserve(addr.scheme.size() + addr.host.size() + 4 + 8);
+            addr.address = addr.scheme + "://" + addr.host;
+            
+            if(port > 0) {
+                char port_str[16] = { 0 };
+                ATBUS_FUNC_SNPRINTF(port_str, sizeof(port_str), "%d", port);
+                addr.address += ":";
+                addr.address += &port_str[0];
+            }
         }
     }
 }

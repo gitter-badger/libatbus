@@ -11,6 +11,7 @@ typedef enum {
     EN_ATBUS_ERR_NO_DATA                    = -3, // 无数据
     EN_ATBUS_ERR_BUFF_LIMIT                 = -4, // 缓冲区不足
     EN_ATBUS_ERR_MALLOC                     = -5, // 分配失败
+    EN_ATBUS_ERR_SCHEME                     = -6, // 协议错误
 
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
 
@@ -26,6 +27,16 @@ typedef enum {
     EN_ATBUS_ERR_SHM_GET_FAILED             = -301,// 连接共享内存出错，具体错误原因可以查看errno或类似的位置
     EN_ATBUS_ERR_SHM_NOT_FOUND              = -302,// 共享内存未找到
 
+    EN_ATBUS_ERR_SOCK_BIND_FAILED           = -401,// 绑定地址或端口失败
+    EN_ATBUS_ERR_SOCK_LISTEN_FAILED         = -402,// 监听失败
+    EN_ATBUS_ERR_SOCK_CONNECT_FAILED        = -403,// 连接失败
+
+    EN_ATBUS_ERR_PIPE_BIND_FAILED           = -501,// 绑定地址或端口失败
+    EN_ATBUS_ERR_PIPE_LISTEN_FAILED         = -502,// 监听失败
+    EN_ATBUS_ERR_PIPE_CONNECT_FAILED        = -503,// 连接失败
+
+    EN_ATBUS_ERR_DNS_GETADDR_FAILED         = -601,// DNS解析失败
+    EN_ATBUS_ERR_CONNECTION_NOT_FOUND       = -602,// 找不到连接
 } ATBUS_ERROR_TYPE;
 
 #endif

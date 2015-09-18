@@ -17,8 +17,11 @@
 #include <ostream>
 #include <string>
 
+#include "std/smart_ptr.h"
+
 #include "libatbus_config.h"
 #include "libatbus_adapter_libuv.h"
+#include "buffer.h"
 
 #if defined(__ANDROID__)
 #elif defined(__APPLE__)
@@ -47,7 +50,7 @@ namespace atbus {
             std::string         address;        // 主机完整地址，比如：ipv4://127.0.0.1:8123 或 unix:///tmp/atbut.sock
             std::string         scheme;         // 协议名称，比如：ipv4 或 unix
             std::string         host;           // 主机地址，比如：127.0.0.1 或 /tmp/atbut.sock
-            uint16_t            port;           // 端口。（仅网络连接有效）
+            int                 port;           // 端口。（仅网络连接有效）
         } channel_address_t;
 
         // memory channel
@@ -61,12 +64,44 @@ namespace atbus {
         #endif
 
         // stream channel(tcp,pipe(unix socket) and etc. udp is not a stream)
+        struct io_stream_connection;
+        struct io_stream_channel;
+        typedef void(*io_stream_callback_t)(
+            io_stream_channel* channel,         // 事件触发的channel
+            io_stream_connection* connection,   // 事件触发的连接
+            int status,                         // libuv传入的转态码
+            void*,                              // 额外参数(不同事件不同含义)
+            size_t s                            // 额外参数长度
+        );
+
+        struct io_stream_callback_evt_t {
+            enum mem_fn_t {
+                EN_FN_ACCEPTED = 0,
+                EN_FN_CONNECTED, // 连接或listen成功
+                EN_FN_DISCONNECTED,
+                EN_FN_RECVED,
+                MAX
+            };
+            // 回调函数
+            io_stream_callback_t callbacks[MAX];
+        } ;
+
         // 以下不是POD类型，所以不得不暴露出来
         struct io_stream_connection {
-            channel_address_t   addr;
-            adapter::stream_t*  fds;            // 流设备
-            adapter::fd_t       fd;             // 原始设备描述符/HANDLE
-            int                 status;         // 状态
+            channel_address_t                   addr;
+            std::shared_ptr<adapter::stream_t>  handle;            // 流设备
+            typedef enum {
+                EN_ST_CREATED = 0,
+                EN_ST_CONNECTING,
+                EN_ST_CONNECTED,
+                EN_ST_CONFIRMED,
+                EN_ST_DISCONNECTIED
+            } status_t;
+            status_t                            status;             // 状态
+            io_stream_channel*                  channel;
+
+            // 事件响应
+            io_stream_callback_evt_t            evt;
 
             // 数据区域
             detail::buffer_manager write_buffers;     // 写数据缓冲区(两种Buffer管理方式，一种动态，一种静态)
@@ -74,14 +109,19 @@ namespace atbus {
         };
 
         struct io_stream_conf {
+            time_t keepalive;
+
             bool is_noblock;
             bool is_nodelay;
-            bool is_keepalive;
-
+            bool send_buffer_static;
+            bool recv_buffer_static;
             size_t send_buffer_max_size;
             size_t send_buffer_limit_size;
             size_t recv_buffer_max_size;
             size_t recv_buffer_limit_size;
+
+            time_t confirm_timeout;
+            size_t backlog;     // backlog indicates the number of connections the kernel might queue
         };
 
         struct io_stream_channel {
@@ -93,14 +133,11 @@ namespace atbus {
             typedef ATBUS_ADVANCE_TYPE_MAP(adapter::fd_t, std::shared_ptr<io_stream_connection> ) conn_pool_t;
             conn_pool_t conn_pool;
 
-            // 回调函数
-            io_stream_callback_t on_connected;
-            io_stream_callback_t on_disconnected;
-            io_stream_callback_t on_recv;
+            // 事件响应
+            io_stream_callback_evt_t            evt;
 
             // 统计信息
         };
-        typedef void (*io_stream_callback_t)(io_stream_channel* channel, io_stream_connection* connection, int status, void*);
     }
 }
 
