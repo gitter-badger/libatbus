@@ -377,7 +377,7 @@ namespace atbus {
         };
 
         // listen 接口传入域名时的回调
-        void io_stream_dns_connection_cb(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
+        static void io_stream_dns_connection_cb(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
             io_stream_dns_async_data* async_data = NULL;
             int listen_res = 0;
             do {
@@ -576,7 +576,7 @@ namespace atbus {
         }
 
         // listen 接口传入域名时的回调
-        void io_stream_dns_connect_cb(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
+        static void io_stream_dns_connect_cb(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
             io_stream_dns_async_data* async_data = NULL;
             int listen_res = 0;
             do {
