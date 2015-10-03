@@ -1,5 +1,5 @@
 //
-// Created by Å·ÎÄèº on 2015/8/11.
+// Created by æ¬§æ–‡éŸ¬ on 2015/8/11.
 //
 
 #include <cstdlib>
@@ -213,7 +213,11 @@ namespace atbus {
             return NULL == static_buffer_.buffer_? dynamic_front(pointer, s): static_front(pointer, s);
         }
 
-        int buffer_manager::push(void*& pointer, size_t s) {
+        int buffer_manager::back(void*& pointer, size_t& s) {
+            return NULL == static_buffer_.buffer_? dynamic_back(pointer, s): static_back(pointer, s);
+        }
+
+        int buffer_manager::push_back(void*& pointer, size_t s) {
             pointer = NULL;
             if (limit_.limit_number_ > 0 && limit_.cost_number_ >= limit_.limit_number_) {
                 return EN_ATBUS_ERR_BUFF_LIMIT;
@@ -223,7 +227,7 @@ namespace atbus {
                 return EN_ATBUS_ERR_BUFF_LIMIT;
             }
 
-            int res = NULL == static_buffer_.buffer_? dynamic_push(pointer, s): static_push(pointer, s);
+            int res = NULL == static_buffer_.buffer_? dynamic_push_back(pointer, s): static_push_back(pointer, s);
             if (res >= 0) {
                 ++ limit_.cost_number_;
                 limit_.cost_size_ += s;
@@ -232,8 +236,31 @@ namespace atbus {
             return res;
         }
 
-        int buffer_manager::pop(size_t s) {
-            return NULL == static_buffer_.buffer_? dynamic_pop(s): static_pop(s);
+        int buffer_manager::push_front(void*& pointer, size_t s) {
+            pointer = NULL;
+            if (limit_.limit_number_ > 0 && limit_.cost_number_ >= limit_.limit_number_) {
+                return EN_ATBUS_ERR_BUFF_LIMIT;
+            }
+
+            if (limit_.limit_size_ > 0 && limit_.cost_size_ + s > limit_.limit_size_) {
+                return EN_ATBUS_ERR_BUFF_LIMIT;
+            }
+
+            int res = NULL == static_buffer_.buffer_? dynamic_push_front(pointer, s): static_push_front(pointer, s);
+            if (res >= 0) {
+                ++ limit_.cost_number_;
+                limit_.cost_size_ += s;
+            }
+
+            return res;
+        }
+
+        int buffer_manager::pop_back(size_t s) {
+            return NULL == static_buffer_.buffer_? dynamic_pop_back(s): static_pop_back(s);
+        }
+
+        int buffer_manager::pop_front(size_t s) {
+            return NULL == static_buffer_.buffer_? dynamic_pop_front(s): static_pop_front(s);
         }
 
         bool buffer_manager::empty() const {
@@ -254,7 +281,23 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int buffer_manager::static_push(void*& pointer, size_t s) {
+        int buffer_manager::static_back(void*& pointer, size_t& s) {
+            if (static_empty()) {
+                pointer = NULL;
+                s = 0;
+                return EN_ATBUS_ERR_NO_DATA;
+            }
+
+            buffer_block& t = *static_buffer_.circle_index_[
+                (static_buffer_.tail_ + static_buffer_.circle_index_.size() - 1) % static_buffer_.circle_index_.size()
+            ];
+            pointer = t.data();
+            s = t.size();
+
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        int buffer_manager::static_push_back(void*& pointer, size_t s) {
             assert(static_buffer_.circle_index_.size() >= 2);
 
             pointer = NULL;
@@ -332,7 +375,130 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int buffer_manager::static_pop(size_t s) {
+        int buffer_manager::static_push_front(void*& pointer, size_t s) {
+            assert(static_buffer_.circle_index_.size() >= 2);
+
+            pointer = NULL;
+            if ((static_buffer_.tail_ + 1) % static_buffer_.circle_index_.size() == static_buffer_.head_) {
+                return EN_ATBUS_ERR_BUFF_LIMIT;
+            }
+
+#define index_pre_head() ((static_buffer_.head_ + static_buffer_.circle_index_.size() - 1) % static_buffer_.circle_index_.size())
+#define assign_head(x) static_buffer_.circle_index_[static_buffer_.head_] = reinterpret_cast<buffer_block*>(x)
+#define sub_head(d) \
+            static_buffer_.head_ = index_pre_head();                                \
+            assign_head(d);                                                         \
+            pointer = static_buffer_.circle_index_[static_buffer_.head_]->data()
+
+            buffer_block* head = static_buffer_.circle_index_[static_buffer_.head_];
+            buffer_block* tail = static_buffer_.circle_index_[static_buffer_.tail_];
+
+            size_t fs = buffer_block::full_size(s);
+            // empty init
+            if (NULL == head || NULL == tail) {
+                static_buffer_.tail_ = 0;
+                static_buffer_.head_ = 0;
+                assign_head(static_buffer_.buffer_);
+
+                head = static_buffer_.circle_index_[static_buffer_.head_];
+                tail = static_buffer_.circle_index_[static_buffer_.tail_];
+            }
+
+            if (tail >= head) { // .... head NNNNNN tail ....
+                size_t free_len = fn::buffer_offset(head, static_buffer_.buffer_);
+                if (free_len >= fs) { // .... new_head NN old_head NNNNNN tail ....
+                    void* buffer_start = fn::buffer_step(static_buffer_.buffer_, free_len - fs);
+                    void* next_free = buffer_block::create(buffer_start, fs, s);
+                    if (NULL == next_free) {
+                        return EN_ATBUS_ERR_MALLOC;
+                    }
+                    assert(head == next_free);
+                    sub_head(buffer_start);
+
+                } else { // ... old_head NNNNNN tail .... new_head NN
+                    free_len = fn::buffer_offset(tail, fn::buffer_step(static_buffer_.buffer_, static_buffer_.size_));
+                    if (free_len < fs) {
+                        return EN_ATBUS_ERR_BUFF_LIMIT;
+                    }
+
+                    void* buffer_start = fn::buffer_step(tail, free_len - fs);
+                    void* next_free = buffer_block::create(buffer_start, fs, s);
+                    if (NULL == next_free) {
+                        return EN_ATBUS_ERR_MALLOC;
+                    }
+                    assert(next_free == fn::buffer_step(static_buffer_.buffer_, static_buffer_.size_));
+                    sub_head(buffer_start);
+                }
+
+            } else { // NNN tail ....  head NNNNNN ....
+                size_t free_len = fn::buffer_offset(tail, head);
+                if (free_len < fs) {
+                    return EN_ATBUS_ERR_BUFF_LIMIT;
+                }
+
+                void* buffer_start = fn::buffer_step(tail, free_len - fs);
+                // NNN tail  .... new_head NN head NNNNNN ....
+                void* next_free = buffer_block::create(buffer_start, fs, s);
+                if (NULL == next_free) {
+                    return EN_ATBUS_ERR_MALLOC;
+                }
+                assert(next_free == head);
+                sub_head(buffer_start);
+            }
+
+#undef sub_head
+#undef assign_head
+#undef index_pre_head
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        int buffer_manager::static_pop_back(size_t s) {
+            if (static_empty()) {
+                return EN_ATBUS_ERR_NO_DATA;
+            }
+
+#define index_tail() ((static_buffer_.tail_ + static_buffer_.circle_index_.size() - 1) % static_buffer_.circle_index_.size())
+#define assign_tail(x) static_buffer_.circle_index_[index_tail()] = reinterpret_cast<buffer_block*>(x)
+#define sub_tail(x) static_buffer_.tail_ = x
+
+            size_t tail_index = index_tail();
+            buffer_block* tail = static_buffer_.circle_index_[tail_index];
+
+            if (s > tail->size()) {
+                s = tail->size();
+            }
+
+            tail->pop(s);
+            if (0 == tail->size()) {
+                buffer_block::destroy(tail);
+                assign_tail(NULL);
+                sub_tail(tail_index);
+
+                if (limit_.cost_number_ > 0) {
+                    --limit_.cost_number_;
+                }
+            }
+
+
+            // fix limit and reset to init state
+            if (static_empty()) {
+                static_buffer_.head_ = 0;
+                static_buffer_.tail_ = 0;
+                static_buffer_.circle_index_[static_buffer_.tail_] = reinterpret_cast<buffer_block*>(static_buffer_.buffer_);
+
+                limit_.cost_size_ = 0;
+                limit_.cost_number_ = 0;
+            } else {
+                limit_.cost_size_ -= limit_.cost_size_ >= s? s: limit_.cost_size_;
+            }
+
+#undef assign_tail
+#undef sub_tail
+#undef index_tail
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        int buffer_manager::static_pop_front(size_t s) {
             if (static_empty()) {
                 return EN_ATBUS_ERR_NO_DATA;
             }
@@ -394,7 +560,21 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int buffer_manager::dynamic_push(void*& pointer, size_t s) {
+        int buffer_manager::dynamic_back(void*& pointer, size_t& s) {
+            if (dynamic_empty()) {
+                pointer = NULL;
+                s = 0;
+                return EN_ATBUS_ERR_NO_DATA;
+            }
+
+            buffer_block& t = *dynamic_buffer_.back();
+            pointer = t.data();
+            s = t.size();
+
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        int buffer_manager::dynamic_push_back(void*& pointer, size_t s) {
             buffer_block* res = buffer_block::malloc(s);
             if (NULL == res) {
                 pointer = NULL;
@@ -407,7 +587,51 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int buffer_manager::dynamic_pop(size_t s) {
+        int buffer_manager::dynamic_push_front(void*& pointer, size_t s) {
+            buffer_block* res = buffer_block::malloc(s);
+            if (NULL == res) {
+                pointer = NULL;
+                return EN_ATBUS_ERR_MALLOC;
+            }
+
+            dynamic_buffer_.push_front(res);
+            pointer = res->data();
+
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        int buffer_manager::dynamic_pop_back(size_t s) {
+            if (dynamic_empty()) {
+                return EN_ATBUS_ERR_NO_DATA;
+            }
+
+            buffer_block* t = dynamic_buffer_.back();
+            if (s > t->size()) {
+                s = t->size();
+            }
+
+            t->pop(s);
+            if(t->size() <= 0) {
+                buffer_block::free(t);
+                dynamic_buffer_.pop_back();
+
+                if (limit_.cost_number_ > 0) {
+                    --limit_.cost_number_;
+                }
+            }
+
+            // fix limit
+            if (dynamic_empty()) {
+                limit_.cost_size_ = 0;
+                limit_.cost_number_ = 0;
+            } else {
+                limit_.cost_size_ -= limit_.cost_size_ >= s? s: limit_.cost_size_;
+            }
+
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        int buffer_manager::dynamic_pop_front(size_t s) {
             if (dynamic_empty()) {
                 return EN_ATBUS_ERR_NO_DATA;
             }

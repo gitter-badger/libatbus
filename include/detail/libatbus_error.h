@@ -37,6 +37,7 @@ typedef enum {
 
     EN_ATBUS_ERR_DNS_GETADDR_FAILED         = -601,// DNS解析失败
     EN_ATBUS_ERR_CONNECTION_NOT_FOUND       = -602,// 找不到连接
+    EN_ATBUS_ERR_WRITE_FAILED               = -603,// 底层API写失败
 } ATBUS_ERROR_TYPE;
 
 #endif

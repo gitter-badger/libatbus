@@ -21,6 +21,9 @@
 
 #ifdef ATBUS_MACRO_ENABLE_STATIC_ASSERT
 #include <type_traits>
+#include <detail/libatbus_channel_types.h>
+#include <uv-win.h>
+
 #endif
 
 namespace atbus {
@@ -98,6 +101,8 @@ namespace atbus {
             channel->is_loop_owner = false;
 
             memset(channel->evt.callbacks, NULL, sizeof(channel->evt.callbacks));
+
+            channel->error_code = 0;
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -128,6 +133,25 @@ namespace atbus {
             channel->ev_loop = NULL;
             return EN_ATBUS_ERR_SUCCESS;
         }
+
+
+        static void io_stream_on_recv_alloc_fn(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
+            io_stream_channel* channel = reinterpret_cast<io_stream_channel*>(handle->data);
+            // TODO 指定读取内存区，判定内存限制
+
+            // TODO 正在读取vint时，指定缓冲区为head内存块
+
+            // TODO 否则指定为大内存块缓冲区
+        }
+
+        static void io_stream_on_recv_read_fn(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf){
+            io_stream_channel* channel = reinterpret_cast<io_stream_channel*>(stream->data);
+
+            // TODO 如果读取vint成功，判定是否有小数据包。并对小数据包直接回调+后续数据前移
+
+            // TODO 如果在大内存块缓冲区，判定回调
+        }
+
 
         static void io_stream_stream_init(io_stream_channel* channel, adapter::stream_t* handle) {
             if (NULL == channel || NULL == handle) {
@@ -207,6 +231,7 @@ namespace atbus {
             if (channel->conf.recv_buffer_static) {
                 ret->read_buffers.set_mode(channel->conf.recv_buffer_max_size, 0);
             }
+            ret->read_head.len = 0;
 
             ret->write_buffers.set_limit(channel->conf.send_buffer_max_size, 0);
             if (channel->conf.send_buffer_static) {
@@ -219,7 +244,8 @@ namespace atbus {
             // 监听关闭事件，用于释放资源
             handle->close_cb = io_stream_connection_on_close;
 
-            // TODO 监听可写/可读事件
+            // 监听可读事件
+            uv_read_start(handle.get(), io_stream_on_recv_alloc_fn, io_stream_on_recv_read_fn);
 
             return ret;
         }
@@ -778,6 +804,85 @@ namespace atbus {
             }
 
             return io_stream_disconnect(channel, iter->second.get(), callback);
+        }
+
+        static void io_stream_on_written_fn(uv_write_t* req, int status) {
+            // 这里之后不会再调用req，req放在缓冲区内，可以正常释放了
+            // 只要uv_write2返回0，这里都会回调。无论是否真的发送成功。所以这里必须释放内存块
+
+            io_stream_connection* connection = reinterpret_cast<io_stream_connection*>(req->data);
+
+            void* data = NULL;
+            size_t len;
+
+            // 弹出丢失的回调
+            while(req != data) {
+                connection->write_buffers.front(data, len);
+                if (NULL == data || 0 == len) {
+                    break;
+                }
+
+                // len = uv_write_t的大小+vint的大小+数据区长度
+                char* buff_start = reinterpret_cast<char*>(data);
+                buff_start += sizeof(uv_write_t);
+                uint64_t out;
+                size_t vint_len = detail::fn::read_vint(out, buff_start, len - sizeof(uv_write_t));
+
+                assert(out == len - vint_len - sizeof(uv_write_t));
+
+                io_stream_channel_callback(
+                    io_stream_callback_evt_t::EN_FN_WRITEN,
+                    connection->channel,
+                    connection,
+                    status,
+                    buff_start + vint_len,
+                    vint_len
+                );
+
+                // 消除缓存
+                connection->write_buffers.pop_back(len);
+            }
+            // libuv内部维护了一个发送队列，所以不需要再启动发送流程
+        }
+
+        int io_stream_send(io_stream_connection* connection, const void* buf, size_t len) {
+            if (NULL == connection) {
+                return EN_ATBUS_ERR_PARAMS;
+            }
+
+            char vint[16];
+            size_t vint_len = detail::fn::write_vint(len, vint, sizeof(vint));
+            // 计算需要的内存块大小（uv_write_t的大小+vint的大小+len）
+            size_t total_buffer_size = sizeof(uv_write_t) + vint_len + len;
+
+            // 判定内存限制
+            void* data;
+            int res = connection->write_buffers.push_back(data, total_buffer_size);
+            if (res < 0) {
+                return res;
+            }
+
+            // 初始化req，填充vint，复制数据区
+            uv_write_t* req = reinterpret_cast<uv_write_t*>(data);
+            req->data = connection;
+            char* buff_start = reinterpret_cast<char*>(data);
+
+            buff_start += sizeof(uv_write_t);
+            memcpy(buff_start, vint, vint_len);
+
+            memcpy(buff_start + vint_len, buf, len);
+
+            // 调用写出函数，bufs[]会在libuv内部复制
+            uv_buf_t bufs[1] = { uv_buf_init(buff_start, vint_len + len) };
+            res = uv_write(req, connection->handle.get(), bufs, 1, io_stream_on_written_fn);
+            if (0 != res) {
+                connection->channel->error_code = res;
+                connection->write_buffers.pop_back(total_buffer_size);
+                return EN_ATBUS_ERR_WRITE_FAILED;
+            }
+
+            // libuv调用失败时，直接返回底层错误。因为libuv内部也维护了一个发送队列，所以不会受到TCP发送窗口的限制
+            return EN_ATBUS_ERR_SUCCESS;
         }
     }
 }

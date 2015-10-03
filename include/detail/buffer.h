@@ -126,9 +126,15 @@ namespace atbus {
 
             int front(void*& pointer, size_t& s);
 
-            int push(void*& pointer, size_t s);
+            int back(void*& pointer, size_t& s);
 
-            int pop(size_t s);
+            int push_back(void*& pointer, size_t s);
+
+            int push_front(void*& pointer, size_t s);
+
+            int pop_back(size_t s);
+
+            int pop_front(size_t s);
 
             bool empty() const;
 
@@ -144,17 +150,29 @@ namespace atbus {
         private:
             int static_front(void*& pointer, size_t& s);
 
-            int static_push(void*& pointer, size_t s);
+            int static_back(void*& pointer, size_t& s);
 
-            int static_pop(size_t s);
+            int static_push_back(void*& pointer, size_t s);
+
+            int static_push_front(void*& pointer, size_t s);
+
+            int static_pop_back(size_t s);
+
+            int static_pop_front(size_t s);
 
             bool static_empty() const;
 
             int dynamic_front(void*& pointer, size_t& s);
 
-            int dynamic_push(void*& pointer, size_t s);
+            int dynamic_back(void*& pointer, size_t& s);
 
-            int dynamic_pop(size_t s);
+            int dynamic_push_back(void*& pointer, size_t s);
+
+            int dynamic_push_front(void*& pointer, size_t s);
+
+            int dynamic_pop_back(size_t s);
+
+            int dynamic_pop_front(size_t s);
 
             bool dynamic_empty() const;
 

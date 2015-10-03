@@ -16,6 +16,10 @@
 #endif
 
 
+#ifndef ATBUS_MACRO_DATA_SMALL_SIZE
+#define ATBUS_MACRO_DATA_SMALL_SIZE 512
+#endif
+
 #ifdef _MSC_VER
 #define ATBUS_FUNC_STRCASE_CMP(l, r) _stricmp(l, r)
 #define ATBUS_FUNC_STRNCASE_CMP(l, r, s) _strnicmp(l, r, s)
