@@ -136,7 +136,10 @@ namespace atbus {
 
 
         static void io_stream_on_recv_alloc_fn(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
-            io_stream_channel* channel = reinterpret_cast<io_stream_channel*>(handle->data);
+            io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(handle->data);
+            assert(conn_raw_ptr);
+            io_stream_channel* channel = conn_raw_ptr->channel;
+            assert(channel);
             // TODO 指定读取内存区，判定内存限制
 
             // TODO 正在读取vint时，指定缓冲区为head内存块
@@ -145,7 +148,10 @@ namespace atbus {
         }
 
         static void io_stream_on_recv_read_fn(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf){
-            io_stream_channel* channel = reinterpret_cast<io_stream_channel*>(stream->data);
+            io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(stream->data);
+            assert(conn_raw_ptr);
+            io_stream_channel* channel = conn_raw_ptr->channel;
+            assert(channel);
 
             // TODO 如果读取vint成功，判定是否有小数据包。并对小数据包直接回调+后续数据前移
 
@@ -153,16 +159,39 @@ namespace atbus {
         }
 
 
-        static void io_stream_stream_init(io_stream_channel* channel, adapter::stream_t* handle) {
+        static void io_stream_stream_init(io_stream_channel* channel, io_stream_connection* conn, adapter::stream_t* handle) {
             if (NULL == channel || NULL == handle) {
                 return;
             }
 
-            handle->data = channel;
+            handle->data = conn;
+        }
+
+        static void io_stream_tcp_init(io_stream_channel* channel, io_stream_connection* conn, adapter::tcp_t* handle) {
+            if (NULL == channel || NULL == handle) {
+                return;
+            }
+
+            io_stream_stream_init(channel, conn, reinterpret_cast<adapter::stream_t*>(handle));
+        }
+
+        static void io_stream_pipe_init(io_stream_channel* channel, io_stream_connection* conn, adapter::pipe_t* handle) {
+            if (NULL == channel || NULL == handle) {
+                return;
+            }
+
+            io_stream_stream_init(channel, conn, reinterpret_cast<adapter::stream_t*>(handle));
+        }
+
+        static void io_stream_stream_setup(io_stream_channel* channel, adapter::stream_t* handle) {
+            if (NULL == channel || NULL == handle) {
+                return;
+            }
+
             uv_stream_set_blocking(handle, channel->conf.is_noblock? 0: 1);
         }
 
-        static void io_stream_tcp_init(io_stream_channel* channel, adapter::tcp_t* handle) {
+        static void io_stream_tcp_setup(io_stream_channel* channel, adapter::tcp_t* handle) {
             if (NULL == channel || NULL == handle) {
                 return;
             }
@@ -174,20 +203,22 @@ namespace atbus {
             }
 
             uv_tcp_nodelay(handle, channel->conf.is_nodelay? 1: 0);
-            io_stream_stream_init(channel, reinterpret_cast<adapter::stream_t*>(handle));
+            io_stream_stream_setup(channel, reinterpret_cast<adapter::stream_t*>(handle));
         }
 
-        static void io_stream_pipe_init(io_stream_channel* channel, adapter::pipe_t* handle) {
+        static void io_stream_pipe_setup(io_stream_channel* channel, adapter::pipe_t* handle) {
             if (NULL == channel || NULL == handle) {
                 return;
             }
 
-            io_stream_stream_init(channel, reinterpret_cast<adapter::stream_t*>(handle));
+            io_stream_stream_setup(channel, reinterpret_cast<adapter::stream_t*>(handle));
         }
 
         static void io_stream_connection_on_close(uv_handle_t* handle) {
             adapter::fd_t fd;
-            io_stream_channel* channel = reinterpret_cast<io_stream_channel*>(handle->data);
+            io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(handle->data);
+            assert(conn_raw_ptr);
+            io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
 
             io_stream_channel::conn_pool_t::iterator iter = channel->conn_pool.end();
@@ -267,12 +298,15 @@ namespace atbus {
             T* real_conn = new T();
             adapter::stream_t* stream_conn = reinterpret_cast<adapter::stream_t*>(real_conn);
             res = std::shared_ptr<adapter::stream_t>(stream_conn, io_stream_delete_stream_fn<T>);
+            stream_conn->data = NULL;
             return real_conn;
         }
 
         // tcp 收到连接通用逻辑
         static adapter::tcp_t* io_stream_tcp_connection_common(std::shared_ptr<io_stream_connection>& conn, uv_stream_t* req, int status) {
-            io_stream_channel* channel = reinterpret_cast<io_stream_channel*>(req->data);
+            io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(req->data);
+            assert(conn_raw_ptr);
+            io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
 
             if (0 != status) {
@@ -295,15 +329,20 @@ namespace atbus {
                 return NULL;
             }
 
-            io_stream_tcp_init(channel, tcp_conn);
+            io_stream_tcp_setup(channel, tcp_conn);
+            io_stream_tcp_init(channel, conn.get(), tcp_conn);
             return tcp_conn;
         }
 
         // ipv4 收到连接
         static void io_stream_tcp_connection_cb_ipv4(uv_stream_t* req, int status) {
+            io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(req->data);
+            assert(conn_raw_ptr);
+            io_stream_channel* channel = conn_raw_ptr->channel;
+            assert(channel);
+
             std::shared_ptr<adapter::stream_t> recv_conn;
             std::shared_ptr<io_stream_connection> conn;
-            io_stream_channel* channel = reinterpret_cast<io_stream_channel*>(req->data);
 
             do {
                 adapter::tcp_t* tcp_conn = io_stream_tcp_connection_common(conn, req, status);
@@ -328,9 +367,13 @@ namespace atbus {
 
         // ipv6 收到连接
         static void io_stream_tcp_connection_cb_ipv6(uv_stream_t* req, int status) {
+            io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(req->data);
+            assert(conn_raw_ptr);
+            io_stream_channel* channel = conn_raw_ptr->channel;
+            assert(channel);
+
             std::shared_ptr<adapter::stream_t> recv_conn;
             std::shared_ptr<io_stream_connection> conn;
-            io_stream_channel* channel = reinterpret_cast<io_stream_channel*>(req->data);
 
             do {
                 adapter::tcp_t* tcp_conn = io_stream_tcp_connection_common(conn, req, status);
@@ -355,7 +398,9 @@ namespace atbus {
 
         // pipe 收到连接
         static void io_stream_pipe_connection_cb(uv_stream_t* req, int status) {
-            io_stream_channel* channel = reinterpret_cast<io_stream_channel*>(req->data);
+            io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(req->data);
+            assert(conn_raw_ptr);
+            io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
 
             std::shared_ptr<io_stream_connection> conn;
@@ -382,7 +427,8 @@ namespace atbus {
 
                 conn->status = io_stream_connection::EN_ST_CONNECTED;
 
-                io_stream_pipe_init(channel, pipe_conn);
+                io_stream_pipe_setup(channel, pipe_conn);
+                io_stream_pipe_init(channel, conn.get(), pipe_conn);
 
                 char pipe_path[MAX_PATH] = { 0 };
                 size_t path_len = sizeof(pipe_path);
@@ -485,7 +531,6 @@ namespace atbus {
                             break;
                         }
 
-                        io_stream_tcp_init(channel, handle);
                         if (0 != uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_tcp_connection_cb_ipv4)) {
                             ret = EN_ATBUS_ERR_SOCK_LISTEN_FAILED;
                             break;
@@ -499,23 +544,25 @@ namespace atbus {
                             break;
                         }
 
-                        io_stream_tcp_init(channel, handle);
                         if (0 != uv_listen(reinterpret_cast<adapter::stream_t*>(&handle), channel->conf.backlog, io_stream_tcp_connection_cb_ipv6)) {
                             ret = EN_ATBUS_ERR_SOCK_LISTEN_FAILED;
                             break;
                         }
                     }
 
-                    std::shared_ptr<io_stream_connection> conn = io_stream_make_connection(channel,listen_conn);
+                    std::shared_ptr<io_stream_connection> conn = io_stream_make_connection(channel, listen_conn);
                     if (!conn) {
                         ret = EN_ATBUS_ERR_MALLOC;
                         break;
                     }
                     conn->addr = addr;
                     conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = callback;
-
                     conn->status = io_stream_connection::EN_ST_CONNECTED;
+
                     io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, channel, conn.get(), 0, NULL, 0);
+
+                    io_stream_tcp_setup(channel, handle);
+                    io_stream_tcp_init(channel, conn.get(), handle);
 
                     return ret;
                 } while (false);
@@ -533,7 +580,6 @@ namespace atbus {
                         break;
                     }
 
-                    io_stream_pipe_init(channel, handle);
                     if (0 != uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_pipe_connection_cb)) {
                         ret = EN_ATBUS_ERR_PIPE_LISTEN_FAILED;
                         break;
@@ -544,12 +590,15 @@ namespace atbus {
                         ret = EN_ATBUS_ERR_MALLOC;
                         break;
                     }
+
                     conn->addr = addr;
                     conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = callback;
-
                     conn->status = io_stream_connection::EN_ST_CONNECTED;
+
                     io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, channel, conn.get(), 0, NULL, 0);
 
+                    io_stream_pipe_setup(channel, handle);
+                    io_stream_pipe_init(channel, conn.get(), handle);
                     return ret;
                 } while (false);
 
@@ -582,23 +631,53 @@ namespace atbus {
             return EN_ATBUS_ERR_SCHEME;
         }
 
+        static struct io_stream_connect_async_data {
+            uv_connect_t req;
+            channel_address_t addr;
+            io_stream_channel* channel;
+            io_stream_callback_t callback;
+            std::shared_ptr<adapter::stream_t> stream;
+            bool pipe;
+        };
 
         static void io_stream_all_connected_cb(uv_connect_t* req, int status) {
-            io_stream_connection* conn = reinterpret_cast<io_stream_connection*>(req->data);
-            assert(conn);
+            io_stream_connect_async_data* async_data = reinterpret_cast<io_stream_connect_async_data*>(req->data);
+            assert(async_data);
+            assert(async_data->channel);
+
+            std::shared_ptr<io_stream_connection> conn;
+            do {
+                conn = io_stream_make_connection(async_data->channel, async_data->stream);
+                if (!conn) {
+                    status = EN_ATBUS_ERR_MALLOC;
+                    break;
+                }
+                conn->addr = async_data->addr;
+
+                if (async_data->pipe) {
+                    io_stream_pipe_init(async_data->channel, conn.get(), reinterpret_cast<adapter::pipe_t*>(req->handle));
+                } else {
+                    io_stream_tcp_init(async_data->channel, conn.get(), reinterpret_cast<adapter::tcp_t*>(req->handle));
+                }
+
+                conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = async_data->callback;
+                conn->status = io_stream_connection::EN_ST_CONNECTED;
+            } while(false);
 
             if (0 == status) {
-                conn->status = io_stream_connection::EN_ST_CONNECTED;
-                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, conn->channel, conn, status, NULL, 0);
+                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, async_data->channel, conn.get(), status, NULL, 0);
             } else {
-                conn->status = io_stream_connection::EN_ST_CREATED;
-                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, conn->channel, conn, status, NULL, 0);
+                if(conn) {
+                    conn->status = io_stream_connection::EN_ST_CREATED;
+                }
+
+                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, async_data->channel, conn.get(), status, NULL, 0);
 
                 // 释放连接
-                io_stream_connection_on_close(reinterpret_cast<uv_handle_t*>(req->handle));
+                io_stream_disconnect(async_data->channel, conn.get(), NULL);
             }
 
-            delete req;
+            delete async_data;
         }
 
         // listen 接口传入域名时的回调
@@ -674,11 +753,17 @@ namespace atbus {
                 }
 
                 uv_tcp_init(ev_loop, handle);
-                
-                uv_connect_t* conn_req = new uv_connect_t();
-                if (NULL == conn_req) {
+
+                io_stream_connect_async_data* async_data = new io_stream_connect_async_data();
+                if (NULL == async_data) {
                     return EN_ATBUS_ERR_MALLOC;
                 }
+                async_data->pipe = false;
+                async_data->addr = addr;
+                async_data->channel = channel;
+                async_data->callback = callback;
+                async_data->req.data = async_data;
+                async_data->stream = sock_conn;
 
                 int ret = EN_ATBUS_ERR_SUCCESS;
                 do {
@@ -688,34 +773,25 @@ namespace atbus {
 
                     if ('4' == addr.scheme[3]) {
                         uv_ip4_addr(addr.host.c_str(), addr.port, &sock_addr);
-                        io_stream_tcp_init(channel, handle);
                         sock_addr_ptr = reinterpret_cast<sockaddr*>(&sock_addr);
                     } else {
                         uv_ip6_addr(addr.host.c_str(), addr.port, &sock_addr6);
-                        io_stream_tcp_init(channel, handle);
                         sock_addr_ptr = reinterpret_cast<sockaddr*>(&sock_addr6);
                     }
 
-                    std::shared_ptr<io_stream_connection> conn = io_stream_make_connection(channel, sock_conn);
-                    conn_req->data = conn.get();
-                    if (!conn) {
-                        ret = EN_ATBUS_ERR_MALLOC;
-                        break;
-                    }
-                    conn->addr = addr;
-                    conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = callback;
-                    conn->status = io_stream_connection::EN_ST_CONNECTING;
-
-                    if(0 != uv_tcp_connect(conn_req, handle, sock_addr_ptr, io_stream_all_connected_cb)) {
+                    io_stream_tcp_setup(channel, handle);
+                    if(0 != uv_tcp_connect(&async_data->req, handle, sock_addr_ptr, io_stream_all_connected_cb)) {
                         ret = EN_ATBUS_ERR_SOCK_CONNECT_FAILED;
                         break;
                     }
+
                     //conn_req = NULL; // 防止异常情况会调用回调时，任然释放对象
                     return ret;
                 } while (false);
 
-                if (NULL != conn_req) {
-                    delete conn_req;
+                // 回收
+                if (NULL != async_data) {
+                    delete async_data;
                 }
 
                 uv_close(reinterpret_cast<uv_handle_t*>(handle), NULL);
@@ -727,34 +803,21 @@ namespace atbus {
 
                 int ret = EN_ATBUS_ERR_SUCCESS;
 
-                uv_connect_t* conn_req = new uv_connect_t();
-                if (NULL == conn_req) {
+                io_stream_connect_async_data* async_data = new io_stream_connect_async_data();
+                if (NULL == async_data) {
                     return EN_ATBUS_ERR_MALLOC;
                 }
+                async_data->pipe = true;
+                async_data->addr = addr;
+                async_data->channel = channel;
+                async_data->callback = callback;
+                async_data->req.data = async_data;
+                async_data->stream = pipe_conn;
 
-                do {
-                    io_stream_pipe_init(channel, handle);
+                // 不会失败
+                io_stream_pipe_setup(channel, handle);
+                uv_pipe_connect(&async_data->req, handle, addr.host.c_str(), io_stream_all_connected_cb);
 
-                    std::shared_ptr<io_stream_connection> conn = io_stream_make_connection(channel, pipe_conn);
-                    conn_req->data = conn.get();
-                    if (!conn) {
-                        ret = EN_ATBUS_ERR_MALLOC;
-                        break;
-                    }
-                    conn->addr = addr;
-                    conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = callback;
-                    conn->status = io_stream_connection::EN_ST_CONNECTING;
-
-                    uv_pipe_connect(conn_req, handle, addr.host.c_str(), io_stream_all_connected_cb);
-                    return ret;
-                } while (false);
-
-                if (NULL != conn_req) {
-                    delete conn_req;
-                }
-
-                uv_close(reinterpret_cast<uv_handle_t*>(handle), NULL);
-                return ret;
             } else if (0 == ATBUS_FUNC_STRNCASE_CMP("dns", addr.scheme.c_str(), 3)) {
                 uv_getaddrinfo_t* req = new uv_getaddrinfo_t();
                 if (NULL == req) {
