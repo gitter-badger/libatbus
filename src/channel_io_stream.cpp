@@ -523,6 +523,8 @@ namespace atbus {
                 uv_tcp_init(ev_loop, handle);
                 int ret = EN_ATBUS_ERR_SUCCESS;
                 do {
+					io_stream_tcp_setup(channel, handle);
+					
                     if ('4' == addr.scheme[3]) {
                         sockaddr_in sock_addr;
                         uv_ip4_addr(addr.host.c_str(), addr.port, &sock_addr);
@@ -559,11 +561,8 @@ namespace atbus {
                     conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = callback;
                     conn->status = io_stream_connection::EN_ST_CONNECTED;
 
+					io_stream_tcp_init(channel, conn.get(), handle);
                     io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, channel, conn.get(), 0, NULL, 0);
-
-                    io_stream_tcp_setup(channel, handle);
-                    io_stream_tcp_init(channel, conn.get(), handle);
-
                     return ret;
                 } while (false);
 
@@ -580,6 +579,7 @@ namespace atbus {
                         break;
                     }
 
+					io_stream_pipe_setup(channel, handle);
                     if (0 != uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_pipe_connection_cb)) {
                         ret = EN_ATBUS_ERR_PIPE_LISTEN_FAILED;
                         break;
@@ -595,10 +595,8 @@ namespace atbus {
                     conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = callback;
                     conn->status = io_stream_connection::EN_ST_CONNECTED;
 
+					io_stream_pipe_init(channel, conn.get(), handle);
                     io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, channel, conn.get(), 0, NULL, 0);
-
-                    io_stream_pipe_setup(channel, handle);
-                    io_stream_pipe_init(channel, conn.get(), handle);
                     return ret;
                 } while (false);
 
@@ -612,6 +610,7 @@ namespace atbus {
 
                 io_stream_dns_async_data* async_data = new io_stream_dns_async_data();
                 if (NULL == async_data) {
+					delete req;
                     return EN_ATBUS_ERR_MALLOC;
                 }
                 async_data->channel = channel;
@@ -754,19 +753,22 @@ namespace atbus {
 
                 uv_tcp_init(ev_loop, handle);
 
-                io_stream_connect_async_data* async_data = new io_stream_connect_async_data();
-                if (NULL == async_data) {
-                    return EN_ATBUS_ERR_MALLOC;
-                }
-                async_data->pipe = false;
-                async_data->addr = addr;
-                async_data->channel = channel;
-                async_data->callback = callback;
-                async_data->req.data = async_data;
-                async_data->stream = sock_conn;
-
-                int ret = EN_ATBUS_ERR_SUCCESS;
+				int ret = EN_ATBUS_ERR_SUCCESS;
+				io_stream_connect_async_data* async_data = NULL;
                 do {
+					async_data = new io_stream_connect_async_data();
+					if (NULL == async_data) {
+						ret = EN_ATBUS_ERR_MALLOC;
+						break;
+					}
+					
+					async_data->pipe = false;
+					async_data->addr = addr;
+					async_data->channel = channel;
+					async_data->callback = callback;
+					async_data->req.data = async_data;
+					async_data->stream = sock_conn;
+
                     sockaddr_in sock_addr;
                     sockaddr_in6 sock_addr6;
                     const sockaddr* sock_addr_ptr = NULL;
@@ -799,25 +801,42 @@ namespace atbus {
             } else if (0 == ATBUS_FUNC_STRNCASE_CMP("unix", addr.scheme.c_str(), 4)) {
                 std::shared_ptr<adapter::stream_t> pipe_conn;
                 adapter::pipe_t* handle = io_stream_make_stream_ptr<adapter::pipe_t>(pipe_conn);
-                uv_pipe_init(ev_loop, handle, 1);
-
-                int ret = EN_ATBUS_ERR_SUCCESS;
-
-                io_stream_connect_async_data* async_data = new io_stream_connect_async_data();
-                if (NULL == async_data) {
+				if (NULL == handle) {
                     return EN_ATBUS_ERR_MALLOC;
                 }
-                async_data->pipe = true;
-                async_data->addr = addr;
-                async_data->channel = channel;
-                async_data->callback = callback;
-                async_data->req.data = async_data;
-                async_data->stream = pipe_conn;
+				
+				uv_pipe_init(ev_loop, handle, 1);
+				
+				int ret = EN_ATBUS_ERR_SUCCESS;
+				io_stream_connect_async_data* async_data = NULL;
+                do {
+					async_data = new io_stream_connect_async_data();
+					if (NULL == async_data) {
+						ret = EN_ATBUS_ERR_MALLOC;
+						break;
+					}
+					async_data->pipe = true;
+					async_data->addr = addr;
+					async_data->channel = channel;
+					async_data->callback = callback;
+					async_data->req.data = async_data;
+					async_data->stream = pipe_conn;
 
-                // 不会失败
-                io_stream_pipe_setup(channel, handle);
-                uv_pipe_connect(&async_data->req, handle, addr.host.c_str(), io_stream_all_connected_cb);
+					// 不会失败
+					io_stream_pipe_setup(channel, handle);
+					uv_pipe_connect(&async_data->req, handle, addr.host.c_str(), io_stream_all_connected_cb);
+					
+					return ret;
+                } while (false);
 
+				// 回收
+                if (NULL != async_data) {
+                    delete async_data;
+                }
+				
+				uv_close(reinterpret_cast<uv_handle_t*>(handle), NULL);
+				return ret;
+				
             } else if (0 == ATBUS_FUNC_STRNCASE_CMP("dns", addr.scheme.c_str(), 3)) {
                 uv_getaddrinfo_t* req = new uv_getaddrinfo_t();
                 if (NULL == req) {
@@ -826,6 +845,7 @@ namespace atbus {
 
                 io_stream_dns_async_data* async_data = new io_stream_dns_async_data();
                 if (NULL == async_data) {
+					delete req;
                     return EN_ATBUS_ERR_MALLOC;
                 }
                 async_data->channel = channel;
