@@ -1,5 +1,5 @@
 //
-// Created by Å·ÎÄèº on 2015/8/11.
+// Created by Å·ï¿½ï¿½ï¿½ on 2015/8/11.
 //
 
 #ifndef LIBATBUS_BUFFER_H
@@ -31,7 +31,7 @@ namespace atbus {
              * @note can not used with signed integer
              * @return how much bytes the integer cost, 0 if failed
              **/
-            size_t read_vint(uint64_t& out, void* pointer, size_t s);
+            size_t read_vint(uint64_t& out, const void* pointer, size_t s);
 
             /**
              * @brief try to write a dynamic int to buffer
@@ -124,17 +124,21 @@ namespace atbus {
              */
             bool set_limit(size_t max_size, size_t max_number);
 
-            int front(void*& pointer, size_t& s);
+            buffer_block* front();
 
-            int back(void*& pointer, size_t& s);
+            int front(void*& pointer, size_t& nread, size_t& nwrite);
+
+            buffer_block* back();
+
+            int back(void*& pointer, size_t& nread, size_t& nwrite);
 
             int push_back(void*& pointer, size_t s);
 
             int push_front(void*& pointer, size_t s);
 
-            int pop_back(size_t s);
+            int pop_back(size_t s, bool free_unwritable = true);
 
-            int pop_front(size_t s);
+            int pop_front(size_t s, bool free_unwritable = true);
 
             bool empty() const;
 
@@ -148,31 +152,31 @@ namespace atbus {
              */
             void set_mode(size_t max_size, size_t max_number);
         private:
-            int static_front(void*& pointer, size_t& s);
+            buffer_block* static_front();
 
-            int static_back(void*& pointer, size_t& s);
+            buffer_block* static_back();
 
             int static_push_back(void*& pointer, size_t s);
 
             int static_push_front(void*& pointer, size_t s);
 
-            int static_pop_back(size_t s);
+            int static_pop_back(size_t s, bool free_unwritable);
 
-            int static_pop_front(size_t s);
+            int static_pop_front(size_t s, bool free_unwritable);
 
             bool static_empty() const;
 
-            int dynamic_front(void*& pointer, size_t& s);
+            buffer_block* dynamic_front();
 
-            int dynamic_back(void*& pointer, size_t& s);
+            buffer_block* dynamic_back();
 
             int dynamic_push_back(void*& pointer, size_t s);
 
             int dynamic_push_front(void*& pointer, size_t s);
 
-            int dynamic_pop_back(size_t s);
+            int dynamic_pop_back(size_t s, bool free_unwritable);
 
-            int dynamic_pop_front(size_t s);
+            int dynamic_pop_front(size_t s, bool free_unwritable);
 
             bool dynamic_empty() const;
 

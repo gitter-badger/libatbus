@@ -12,6 +12,7 @@ typedef enum {
     EN_ATBUS_ERR_BUFF_LIMIT                 = -4, // 缓冲区不足
     EN_ATBUS_ERR_MALLOC                     = -5, // 分配失败
     EN_ATBUS_ERR_SCHEME                     = -6, // 协议错误
+    EN_ATBUS_ERR_EOF                        = -7, // 数据流终止
 
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
 
@@ -38,6 +39,7 @@ typedef enum {
     EN_ATBUS_ERR_DNS_GETADDR_FAILED         = -601,// DNS解析失败
     EN_ATBUS_ERR_CONNECTION_NOT_FOUND       = -602,// 找不到连接
     EN_ATBUS_ERR_WRITE_FAILED               = -603,// 底层API写失败
+    EN_ATBUS_ERR_READ_FAILED                = -604,// 底层API读失败
 } ATBUS_ERROR_TYPE;
 
 #endif

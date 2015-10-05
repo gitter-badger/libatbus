@@ -28,7 +28,7 @@ namespace atbus {
                 return lc < rc? rc - lc: lc - rc;
             }
 
-            size_t read_vint(uint64_t& out, void* pointer, size_t s) {
+            size_t read_vint(uint64_t& out, const void* pointer, size_t s) {
                 out = 0;
 
                 if (s == 0 || NULL == pointer) {
@@ -36,7 +36,7 @@ namespace atbus {
                 }
 
                 size_t left = s;
-                for(char* d = reinterpret_cast<char*>(pointer); left > 0; ++ d) {
+                for(const char* d = reinterpret_cast<const char*>(pointer); left > 0; ++ d) {
                     -- left;
 
                     out <<= 7;
@@ -209,12 +209,42 @@ namespace atbus {
             return false;
         }
 
-        int buffer_manager::front(void*& pointer, size_t& s) {
-            return NULL == static_buffer_.buffer_? dynamic_front(pointer, s): static_front(pointer, s);
+        buffer_block* buffer_manager::front() {
+            return NULL == static_buffer_.buffer_? dynamic_front(): static_front();
         }
 
-        int buffer_manager::back(void*& pointer, size_t& s) {
-            return NULL == static_buffer_.buffer_? dynamic_back(pointer, s): static_back(pointer, s);
+        int buffer_manager::front(void*& pointer, size_t& nread, size_t& nwrite) {
+            buffer_block* res = front();
+            if (NULL == res) {
+                pointer = NULL;
+                nread = nwrite = 0;
+
+                return EN_ATBUS_ERR_NO_DATA;
+            }
+
+            pointer = res->data();
+            nwrite = res->size();
+            nread = res->raw_size() - nwrite;
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        buffer_block* buffer_manager::back() {
+            return NULL == static_buffer_.buffer_? dynamic_back(): static_back();
+        }
+
+        int buffer_manager::back(void*& pointer, size_t& nread, size_t& nwrite) {
+            buffer_block* res = back();
+            if (NULL == res) {
+                pointer = NULL;
+                nread = nwrite = 0;
+
+                return EN_ATBUS_ERR_NO_DATA;
+            }
+
+            pointer = res->data();
+            nwrite = res->size();
+            nread = res->raw_size() - nwrite;
+            return EN_ATBUS_ERR_SUCCESS;
         }
 
         int buffer_manager::push_back(void*& pointer, size_t s) {
@@ -255,46 +285,34 @@ namespace atbus {
             return res;
         }
 
-        int buffer_manager::pop_back(size_t s) {
-            return NULL == static_buffer_.buffer_? dynamic_pop_back(s): static_pop_back(s);
+        int buffer_manager::pop_back(size_t s, bool free_unwritable) {
+            return NULL == static_buffer_.buffer_? dynamic_pop_back(s, free_unwritable): static_pop_back(s, free_unwritable);
         }
 
-        int buffer_manager::pop_front(size_t s) {
-            return NULL == static_buffer_.buffer_? dynamic_pop_front(s): static_pop_front(s);
+        int buffer_manager::pop_front(size_t s, bool free_unwritable) {
+            return NULL == static_buffer_.buffer_? dynamic_pop_front(s, free_unwritable): static_pop_front(s, free_unwritable);
         }
 
         bool buffer_manager::empty() const {
             return NULL == static_buffer_.buffer_? dynamic_empty(): static_empty();
         }
 
-        int buffer_manager::static_front(void*& pointer, size_t& s) {
+        buffer_block* buffer_manager::static_front() {
             if (static_empty()) {
-                pointer = NULL;
-                s = 0;
-                return EN_ATBUS_ERR_NO_DATA;
+                return NULL;
             }
 
-            buffer_block& t = *static_buffer_.circle_index_[static_buffer_.head_];
-            pointer = t.data();
-            s = t.size();
-
-            return EN_ATBUS_ERR_SUCCESS;
+            return static_buffer_.circle_index_[static_buffer_.head_];
         }
 
-        int buffer_manager::static_back(void*& pointer, size_t& s) {
+        buffer_block* buffer_manager::static_back() {
             if (static_empty()) {
-                pointer = NULL;
-                s = 0;
-                return EN_ATBUS_ERR_NO_DATA;
+                return NULL;
             }
 
-            buffer_block& t = *static_buffer_.circle_index_[
+            return *static_buffer_.circle_index_[
                 (static_buffer_.tail_ + static_buffer_.circle_index_.size() - 1) % static_buffer_.circle_index_.size()
             ];
-            pointer = t.data();
-            s = t.size();
-
-            return EN_ATBUS_ERR_SUCCESS;
         }
 
         int buffer_manager::static_push_back(void*& pointer, size_t s) {
@@ -452,7 +470,7 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int buffer_manager::static_pop_back(size_t s) {
+        int buffer_manager::static_pop_back(size_t s, bool free_unwritable) {
             if (static_empty()) {
                 return EN_ATBUS_ERR_NO_DATA;
             }
@@ -469,7 +487,7 @@ namespace atbus {
             }
 
             tail->pop(s);
-            if (0 == tail->size()) {
+            if (free_unwritable && 0 == tail->size()) {
                 buffer_block::destroy(tail);
                 assign_tail(NULL);
                 sub_tail(tail_index);
@@ -498,7 +516,7 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int buffer_manager::static_pop_front(size_t s) {
+        int buffer_manager::static_pop_front(size_t s, bool free_unwritable) {
             if (static_empty()) {
                 return EN_ATBUS_ERR_NO_DATA;
             }
@@ -513,7 +531,7 @@ namespace atbus {
             }
 
             head->pop(s);
-            if (0 == head->size()) {
+            if (free_unwritable && 0 == head->size()) {
                 buffer_block::destroy(head);
                 assign_head(NULL);
                 add_head();
@@ -546,32 +564,20 @@ namespace atbus {
         }
 
 
-        int buffer_manager::dynamic_front(void*& pointer, size_t& s) {
+        buffer_block* buffer_manager::dynamic_front() {
             if (dynamic_empty()) {
-                pointer = NULL;
-                s = 0;
-                return EN_ATBUS_ERR_NO_DATA;
+                return NULL;
             }
 
-            buffer_block& t = *dynamic_buffer_.front();
-            pointer = t.data();
-            s = t.size();
-
-            return EN_ATBUS_ERR_SUCCESS;
+            return dynamic_buffer_.front();
         }
 
-        int buffer_manager::dynamic_back(void*& pointer, size_t& s) {
+        buffer_block* buffer_manager::dynamic_back() {
             if (dynamic_empty()) {
-                pointer = NULL;
-                s = 0;
-                return EN_ATBUS_ERR_NO_DATA;
+                return NULL;
             }
 
-            buffer_block& t = *dynamic_buffer_.back();
-            pointer = t.data();
-            s = t.size();
-
-            return EN_ATBUS_ERR_SUCCESS;
+            return dynamic_buffer_.back();
         }
 
         int buffer_manager::dynamic_push_back(void*& pointer, size_t s) {
@@ -600,7 +606,7 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int buffer_manager::dynamic_pop_back(size_t s) {
+        int buffer_manager::dynamic_pop_back(size_t s, bool free_unwritable) {
             if (dynamic_empty()) {
                 return EN_ATBUS_ERR_NO_DATA;
             }
@@ -611,7 +617,7 @@ namespace atbus {
             }
 
             t->pop(s);
-            if(t->size() <= 0) {
+            if(free_unwritable && t->size() <= 0) {
                 buffer_block::free(t);
                 dynamic_buffer_.pop_back();
 
@@ -625,13 +631,13 @@ namespace atbus {
                 limit_.cost_size_ = 0;
                 limit_.cost_number_ = 0;
             } else {
-                limit_.cost_size_ -= limit_.cost_size_ >= s? s: limit_.cost_size_;
+                limit_.cost_size_ -= limit_.cost_size_ >= s ? s : limit_.cost_size_;
             }
 
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        int buffer_manager::dynamic_pop_front(size_t s) {
+        int buffer_manager::dynamic_pop_front(size_t s, bool free_unwritable) {
             if (dynamic_empty()) {
                 return EN_ATBUS_ERR_NO_DATA;
             }
@@ -642,7 +648,7 @@ namespace atbus {
             }
 
             t->pop(s);
-            if(t->size() <= 0) {
+            if(free_unwritable && t->size() <= 0) {
                 buffer_block::free(t);
                 dynamic_buffer_.pop_front();
 

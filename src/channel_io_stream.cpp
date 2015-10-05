@@ -140,11 +140,26 @@ namespace atbus {
             assert(conn_raw_ptr);
             io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
-            // TODO 指定读取内存区，判定内存限制
 
-            // TODO 正在读取vint时，指定缓冲区为head内存块
+            void* data = NULL;
+            size_t sread = 0, swrite = 0;
+            conn_raw_ptr->read_buffers.back(data, sread, swrite);
 
-            // TODO 否则指定为大内存块缓冲区
+            // 正在读取vint时，指定缓冲区为head内存块
+            if (NULL == data || 0 == swrite) {
+                buf->len = sizeof(conn_raw_ptr->read_head.buffer) - conn_raw_ptr->read_head.len;
+
+                if (0 == buf->len) {
+                    buf->base = NULL;
+                } else {
+                    buf->base = &conn_raw_ptr->read_head.buffer[conn_raw_ptr->read_head.len];
+                }
+                return;
+            }
+
+            // 否则指定为大内存块缓冲区
+            buf->base = reinterpret_cast<char*>(data);
+            buf->len = swrite;
         }
 
         static void io_stream_on_recv_read_fn(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf){
@@ -153,9 +168,103 @@ namespace atbus {
             io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
 
-            // TODO 如果读取vint成功，判定是否有小数据包。并对小数据包直接回调+后续数据前移
+            if (nread <= 0) {
+                channel->error_code = nread;
+                io_stream_channel_callback(
+                    io_stream_callback_evt_t::EN_FN_RECVED,
+                    channel,
+                    conn_raw_ptr,
+                    UV_EOF == nread? EN_ATBUS_ERR_EOF: EN_ATBUS_ERR_READ_FAILED,
+                    NULL,
+                    0
+                );
+                return;
+            }
 
-            // TODO 如果在大内存块缓冲区，判定回调
+            void *data = NULL;
+            size_t sread = 0, swrite = 0;
+            conn_raw_ptr->read_buffers.back(data, sread, swrite);
+
+            // head 阶段
+            if (NULL == data || 0 == swrite) {
+                assert(nread <= sizeof(conn_raw_ptr->read_head.buffer) - conn_raw_ptr->read_head.len);
+                conn_raw_ptr->read_head.len += static_cast<size_t>(nread); // 写数据计数
+
+                // 尝试解出所有的head数据
+                char* buff_start = conn_raw_ptr->read_head.buffer;
+                size_t buff_left_len = conn_raw_ptr->read_head.len;
+
+                // 可能包含多条消息
+                while (buff_left_len > 0) {
+                    uint64_t msg_len = 0;
+                    size_t vint_len = detail::fn::read_vint(msg_len, buff_start, buff_left_len);
+
+                    // 剩余数据不足以解动态长度整数，直接中断退出
+                    if (0 == vint_len) {
+                        break;
+                    }
+
+                    // 如果读取vint成功，判定是否有小数据包。并对小数据包直接回调
+                    if (buff_left_len >= vint_len + msg_len) {
+                        channel->error_code = 0;
+                        io_stream_channel_callback(
+                            io_stream_callback_evt_t::EN_FN_RECVED,
+                            channel,
+                            conn_raw_ptr,
+                            EN_ATBUS_ERR_SUCCESS,
+                            buff_start + vint_len,
+                            msg_len
+                        );
+
+                        buff_start += vint_len + msg_len;
+                        buff_left_len -= vint_len + msg_len;
+                    } else {
+                        // 大数据包，使用缓冲区，并且剩余数据一定是在一个包内
+                        if (EN_ATBUS_ERR_SUCCESS == conn_raw_ptr->read_buffers.push_back(data, msg_len)) {
+                            memcpy(data, buff_start + vint_len, buff_left_len - vint_len);
+
+                            buff_start += buff_left_len;
+                            buff_left_len = 0; // 循环退出
+                        } else {
+                            // 追加大缓冲区失败，可能是到达缓冲区限制
+                            // TODO 读缓冲区一般只有一个正在处理的数据包，如果发生创建失败则是数据错误或者这个包就是超出大小限制的
+                            // TODO 这时候是否应该通知上层然后直接断开连接？
+                            // 强制中断
+                            break;
+                        }
+                    }
+                }
+
+                // 后续数据前移
+                if (buff_start != conn_raw_ptr->read_head.buffer && buff_left_len > 0) {
+                    memmove(conn_raw_ptr->read_head.buffer, buff_start, buff_left_len);
+                }
+                conn_raw_ptr->read_head.len = buff_left_len;
+            } else {
+                size_t nread_s = static_cast<size_t>(nread);
+                assert(nread_s <= swrite);
+
+                // 写数据计数,但不释放缓冲区
+                conn_raw_ptr->read_buffers.pop_back(nread_s, false);
+            }
+
+
+            // 如果在大内存块缓冲区，判定回调
+            conn_raw_ptr->read_buffers.front(data, sread, swrite);
+            if (NULL != data && 0 == swrite) {
+                channel->error_code = 0;
+                io_stream_channel_callback(
+                    io_stream_callback_evt_t::EN_FN_RECVED,
+                    channel,
+                    conn_raw_ptr,
+                    EN_ATBUS_ERR_SUCCESS,
+                    data,
+                    sread
+                );
+
+                // 回调并释放缓冲区
+                conn_raw_ptr->read_buffers.pop_front(0, true);
+            }
         }
 
 
@@ -896,34 +1005,34 @@ namespace atbus {
             io_stream_connection* connection = reinterpret_cast<io_stream_connection*>(req->data);
 
             void* data = NULL;
-            size_t len;
+            size_t nread, nwrite;
 
             // 弹出丢失的回调
             while(req != data) {
-                connection->write_buffers.front(data, len);
-                if (NULL == data || 0 == len) {
+                connection->write_buffers.front(data, nread, nwrite);
+                if (NULL == data || 0 == nwrite) {
                     break;
                 }
 
-                // len = uv_write_t的大小+vint的大小+数据区长度
+                // nwrite = uv_write_t的大小+vint的大小+数据区长度
                 char* buff_start = reinterpret_cast<char*>(data);
                 buff_start += sizeof(uv_write_t);
                 uint64_t out;
-                size_t vint_len = detail::fn::read_vint(out, buff_start, len - sizeof(uv_write_t));
+                size_t vint_len = detail::fn::read_vint(out, buff_start, nwrite - sizeof(uv_write_t));
 
-                assert(out == len - vint_len - sizeof(uv_write_t));
+                assert(out == nwrite - vint_len - sizeof(uv_write_t));
 
                 io_stream_channel_callback(
                     io_stream_callback_evt_t::EN_FN_WRITEN,
                     connection->channel,
                     connection,
-                    status,
+                    EN_ATBUS_ERR_NODE_TIMEOUT,
                     buff_start + vint_len,
                     vint_len
                 );
 
                 // 消除缓存
-                connection->write_buffers.pop_back(len);
+                connection->write_buffers.pop_front(nwrite, true);
             }
             // libuv内部维护了一个发送队列，所以不需要再启动发送流程
         }
@@ -960,7 +1069,7 @@ namespace atbus {
             res = uv_write(req, connection->handle.get(), bufs, 1, io_stream_on_written_fn);
             if (0 != res) {
                 connection->channel->error_code = res;
-                connection->write_buffers.pop_back(total_buffer_size);
+                connection->write_buffers.pop_back(total_buffer_size, false);
                 return EN_ATBUS_ERR_WRITE_FAILED;
             }
 
