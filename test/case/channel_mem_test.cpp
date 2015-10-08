@@ -1,4 +1,4 @@
-#include <iostream>
+﻿#include <iostream>
 #include <fstream>
 #include <cstdio>
 #include <cstdlib>
@@ -50,7 +50,7 @@ CASE_TEST(channel, mem_siso)
 
     size_t send_sum_len;
     size_t try_left = 3;
-    srand(time(NULL));
+    srand(static_cast<unsigned>(time(NULL)));
     size_t first_break = (size_t)rand() % (512 * 1024);
 
     while (try_left -- > 0)
@@ -134,7 +134,7 @@ CASE_TEST(channel, mem_miso)
     CASE_EXPECT_NE(NULL, channel);
     // 4KB header
 
-    srand(time(NULL));
+    srand(static_cast<unsigned>(time(NULL)));
 
     int left_sec = 16;
     std::atomic<size_t> sum_send_len;

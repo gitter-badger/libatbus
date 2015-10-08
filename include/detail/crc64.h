@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #ifndef LIBATBUS_DETAIL_CRC64_H_
 #define LIBATBUS_DETAIL_CRC64_H_

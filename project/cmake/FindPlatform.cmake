@@ -1,4 +1,4 @@
-# platform check 
+﻿# platform check 
 # default to x86 platform.  We'll check for X64 in a bit
 
 SET(PLATFORM x86)

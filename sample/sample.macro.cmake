@@ -1,4 +1,4 @@
-# =========== sample =========== 
+﻿# =========== sample =========== 
 set (PROJECT_SAMPLE_BAS_DIR "${PROJECT_SOURCE_DIR}/sample")
 set (PROJECT_SAMPLE_INC_DIR "${PROJECT_SAMPLE_BAS_DIR}")
 set (PROJECT_SAMPLE_SRC_DIR "${PROJECT_SAMPLE_BAS_DIR}")

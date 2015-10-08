@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by 欧文韬 on 2015/8/11.
 //
 
@@ -310,7 +310,7 @@ namespace atbus {
                 return NULL;
             }
 
-            return *static_buffer_.circle_index_[
+            return static_buffer_.circle_index_[
                 (static_buffer_.tail_ + static_buffer_.circle_index_.size() - 1) % static_buffer_.circle_index_.size()
             ];
         }

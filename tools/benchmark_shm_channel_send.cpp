@@ -13,7 +13,7 @@
 #include <numeric>
 
 #include <detail/libatbus_error.h>
-#include "libatbus_channel_export.h"
+#include "detail/libatbus_channel_export.h"
 
 #ifdef max
 #undef max
@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
         return res;
     }
 
-    srand(time(NULL));
+    srand(static_cast<unsigned>(time(NULL)));
 
     size_t sum_send_len = 0;
     size_t sum_send_times = 0;

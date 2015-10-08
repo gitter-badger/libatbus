@@ -1,4 +1,4 @@
-# cmake 递归包含头文件目录模块 
+﻿# cmake 递归包含头文件目录模块 
 # include_directory_recurse [dir1 [dir2 [...]]] 
 macro(include_directory_recurse)
 	foreach(basedir ${ARGV})

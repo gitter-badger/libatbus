@@ -1,4 +1,4 @@
-
+﻿
 EchoWithColor(COLOR GREEN "-- Configure Test Projects")
 
 enable_testing()

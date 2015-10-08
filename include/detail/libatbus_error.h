@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #ifndef LIBATBUS_DETAIL_LIBATBUS_ERROR_H_
 #define LIBATBUS_DETAIL_LIBATBUS_ERROR_H_

@@ -1,4 +1,4 @@
-# 默认配置选项
+﻿# 默认配置选项
 #####################################################################
 option(BUILD_SHARED_LIBS "Build shared libraries (DLLs)." OFF)
 

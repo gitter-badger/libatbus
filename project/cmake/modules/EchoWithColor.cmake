@@ -1,4 +1,4 @@
-# cmake color echo function
+﻿# cmake color echo function
 # the final output color associated with terminal settings
 # using [print_color.py](https://github.com/owent-utils/python/blob/master/print_color.py) for cross platform color rending. 
 #   so [python](https://www.python.org/) and [print_color.py](https://github.com/owent-utils/python/blob/master/print_color.py) is required.
