@@ -1,5 +1,5 @@
 ﻿//
-// Created by ŷ��� on 2015/8/11.
+// Created by owent on 2015/8/11.
 //
 
 #ifndef LIBATBUS_BUFFER_H
