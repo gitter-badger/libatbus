@@ -476,7 +476,7 @@ namespace atbus {
             }
 
 #define index_tail() ((static_buffer_.tail_ + static_buffer_.circle_index_.size() - 1) % static_buffer_.circle_index_.size())
-#define assign_tail(x) static_buffer_.circle_index_[index_tail()] = reinterpret_cast<buffer_block*>(x)
+#define assign_tail(x) static_buffer_.circle_index_[static_buffer_.tail_] = reinterpret_cast<buffer_block*>(x)
 #define sub_tail(x) static_buffer_.tail_ = x
 
             size_t tail_index = index_tail();
