@@ -75,4 +75,7 @@ void test_case_func_name(test_name, case_name) ()
 
 #endif
 
+#define CASE_INFO() std::cout<< "[ RUNNING  ] "
+#define CASE_ERROR() std::cerr<< "[ RUNNING  ] "
+
 #endif /* TEST_MACROS_H_ */

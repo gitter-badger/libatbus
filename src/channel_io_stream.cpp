@@ -34,17 +34,25 @@ namespace atbus {
 #endif
 
         static inline void io_stream_channel_callback(
-            io_stream_callback_evt_t::mem_fn_t fn, io_stream_channel* channel,
+            io_stream_callback_evt_t::mem_fn_t fn, io_stream_channel* channel, io_stream_connection* conn_evt,
             io_stream_connection* connection, int status,
             void* priv_data, size_t s
-        ) {
+            ) {
             if (NULL != channel && NULL != channel->evt.callbacks[fn]) {
                 channel->evt.callbacks[fn](channel, connection, status, priv_data, s);
             }
 
-            if (NULL != connection && NULL != connection->evt.callbacks[fn]) {
-                channel->evt.callbacks[fn](channel, connection, status, priv_data, s);
+            if (NULL != conn_evt && NULL != conn_evt->evt.callbacks[fn]) {
+                conn_evt->evt.callbacks[fn](channel, connection, status, priv_data, s);
             }
+        }
+
+        static inline void io_stream_channel_callback(
+            io_stream_callback_evt_t::mem_fn_t fn, io_stream_channel* channel,
+            io_stream_connection* connection, int status,
+            void* priv_data, size_t s
+        ) {
+            io_stream_channel_callback(fn, channel, connection, connection, status, priv_data, s);
         }
 
         void io_stream_init_configure(io_stream_conf* conf) {
@@ -450,7 +458,12 @@ namespace atbus {
 
             std::shared_ptr<adapter::stream_t> recv_conn;
             adapter::tcp_t* tcp_conn = io_stream_make_stream_ptr<adapter::tcp_t>(recv_conn);
-            if (NULL == tcp_conn || 0 != uv_accept(req, recv_conn.get())) {
+            if (NULL == tcp_conn) {
+                return NULL;
+            }
+
+            uv_tcp_init(req->loop, tcp_conn);
+            if (0 != uv_accept(req, recv_conn.get())) {
                 return NULL;
             }
 
@@ -497,7 +510,7 @@ namespace atbus {
             } while (false);
 
             // 回调函数，如果发起连接接口调用成功一定要调用回调函数
-            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn.get(), status, NULL, 0);
+            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), status, NULL, 0);
         }
 
         // ipv6 收到连接
@@ -546,7 +559,12 @@ namespace atbus {
 
                 std::shared_ptr<adapter::stream_t> recv_conn;
                 adapter::pipe_t* pipe_conn = io_stream_make_stream_ptr<adapter::pipe_t>(recv_conn);
-                if (NULL == pipe_conn || 0 != uv_accept(req, recv_conn.get())) {
+                if (NULL == pipe_conn) {
+                    break;
+                }
+
+                uv_pipe_init(req->loop, pipe_conn, 1);
+                if (0 != uv_accept(req, recv_conn.get())) {
                     break;
                 }
 
@@ -573,7 +591,7 @@ namespace atbus {
             } while (false);
 
             // 回调函数，如果发起连接接口调用成功一定要调用回调函数
-            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn.get(), status, NULL, 0);
+            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), status, NULL, 0);
         }
 
         // listen 接口传入域名时的回调异步数据
@@ -663,12 +681,12 @@ namespace atbus {
                     if ('4' == addr.scheme[3]) {
                         sockaddr_in sock_addr;
                         uv_ip4_addr(addr.host.c_str(), addr.port, &sock_addr);
-                        if (0 != uv_tcp_bind(handle, reinterpret_cast<const sockaddr*>(&sock_addr), 0)) {
+                        if (0 != (channel->error_code = uv_tcp_bind(handle, reinterpret_cast<const sockaddr*>(&sock_addr), 0))) {
                             ret = EN_ATBUS_ERR_SOCK_BIND_FAILED;
                             break;
                         }
 
-                        if (0 != uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_tcp_connection_cb_ipv4)) {
+                        if (0 != (channel->error_code = uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_tcp_connection_cb_ipv4))) {
                             ret = EN_ATBUS_ERR_SOCK_LISTEN_FAILED;
                             break;
                         }
@@ -676,12 +694,12 @@ namespace atbus {
                     } else {
                         sockaddr_in6 sock_addr;
                         uv_ip6_addr(addr.host.c_str(), addr.port, &sock_addr);
-                        if (0 != uv_tcp_bind(handle, reinterpret_cast<const sockaddr*>(&sock_addr), 0)) {
+                        if (0 != (channel->error_code = uv_tcp_bind(handle, reinterpret_cast<const sockaddr*>(&sock_addr), 0))) {
                             ret = EN_ATBUS_ERR_SOCK_BIND_FAILED;
                             break;
                         }
 
-                        if (0 != uv_listen(reinterpret_cast<adapter::stream_t*>(&handle), channel->conf.backlog, io_stream_tcp_connection_cb_ipv6)) {
+                        if (0 != (channel->error_code = uv_listen(reinterpret_cast<adapter::stream_t*>(&handle), channel->conf.backlog, io_stream_tcp_connection_cb_ipv6))) {
                             ret = EN_ATBUS_ERR_SOCK_LISTEN_FAILED;
                             break;
                         }
