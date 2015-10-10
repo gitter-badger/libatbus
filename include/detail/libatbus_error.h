@@ -13,10 +13,10 @@ typedef enum {
     EN_ATBUS_ERR_MALLOC                     = -5, // 分配失败
     EN_ATBUS_ERR_SCHEME                     = -6, // 协议错误
     EN_ATBUS_ERR_EOF                        = -7, // 数据流终止
+    EN_ATBUS_ERR_BAD_DATA                   = -8, // 数据校验不通过
 
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
 
-    EN_ATBUS_ERR_NODE_BAD_BLOCK_FAST_CHECK  = -201,// 发现写坏的数据块 - 数据校验不通过
     EN_ATBUS_ERR_NODE_BAD_BLOCK_NODE_NUM    = -202,// 发现写坏的数据块 - 节点数量错误
     EN_ATBUS_ERR_NODE_BAD_BLOCK_BUFF_SIZE   = -203,// 发现写坏的数据块 - 节点数量错误
     EN_ATBUS_ERR_NODE_BAD_BLOCK_WSEQ_ID     = -204,// 发现写坏的数据块 - 写操作序列错误
@@ -40,6 +40,8 @@ typedef enum {
     EN_ATBUS_ERR_CONNECTION_NOT_FOUND       = -602,// 找不到连接
     EN_ATBUS_ERR_WRITE_FAILED               = -603,// 底层API写失败
     EN_ATBUS_ERR_READ_FAILED                = -604,// 底层API读失败
+    EN_ATBUS_ERR_EV_RUN                     = -605,// 底层API事件循环失败
+    EN_ATBUS_ERR_NO_LISTEN                  = -606,// 尚未监听（绑定）
 } ATBUS_ERROR_TYPE;
 
 #endif

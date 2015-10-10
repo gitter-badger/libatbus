@@ -123,15 +123,15 @@ namespace atbus {
 
             bool is_noblock;
             bool is_nodelay;
-            bool send_buffer_static;
-            bool recv_buffer_static;
+            size_t send_buffer_static;
+            size_t recv_buffer_static;
             size_t send_buffer_max_size;
             size_t send_buffer_limit_size;
             size_t recv_buffer_max_size;
             size_t recv_buffer_limit_size;
 
             time_t confirm_timeout;
-            size_t backlog;     // backlog indicates the number of connections the kernel might queue
+            int backlog;     // backlog indicates the number of connections the kernel might queue
         };
 
         struct io_stream_channel {

@@ -218,7 +218,7 @@ CASE_TEST(channel, mem_miso)
                     -- read_failcount;
                 } else {
                     CASE_EXPECT_LE(EN_ATBUS_ERR_NODE_BAD_BLOCK_CSEQ_ID, res);
-                    CASE_EXPECT_GE(EN_ATBUS_ERR_NODE_BAD_BLOCK_FAST_CHECK, res);
+                    CASE_EXPECT_GE(EN_ATBUS_ERR_BAD_DATA, res);
                     ++ sum_recv_err;
                 }
             } else {

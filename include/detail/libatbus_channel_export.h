@@ -52,6 +52,7 @@ namespace atbus {
 
         extern int io_stream_init(io_stream_channel* channel, adapter::loop_t* ev_loop, const io_stream_conf* conf);
         extern int io_stream_close(io_stream_channel* channel);
+        extern int io_stream_run(io_stream_channel* channel, adapter::run_mode_t mode = adapter::RUN_NOWAIT);
 
         extern int io_stream_listen(io_stream_channel* channel, const channel_address_t& addr, io_stream_callback_t callback);
 
@@ -60,7 +61,7 @@ namespace atbus {
         extern int io_stream_disconnect(io_stream_channel* channel, io_stream_connection* connection, io_stream_callback_t callback);
         extern int io_stream_disconnect_fd(io_stream_channel* channel, adapter::fd_t fd, io_stream_callback_t callback);
         extern int io_stream_send(io_stream_connection* connection, const void* buf, size_t len);
-        extern void io_stream_show_channel(io_stream_channel* channel, std::ostream& out, bool need_node_status, size_t need_node_data);
+        extern void io_stream_show_channel(io_stream_channel* channel, std::ostream& out);
     }
 }
 

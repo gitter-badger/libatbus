@@ -19,6 +19,12 @@ namespace atbus {
         typedef uv_timer_t timer_t;
 
         typedef uv_os_fd_t fd_t;
+
+        typedef enum {
+            RUN_DEFAULT = UV_RUN_DEFAULT,
+            RUN_ONCE = UV_RUN_ONCE,
+            RUN_NOWAIT = UV_RUN_NOWAIT,
+        } run_mode_t;
     }
 }
 

@@ -18,6 +18,7 @@
 #include "detail/libatbus_error.h"
 #include "detail/libatbus_channel_export.h"
 #include "detail/buffer.h"
+#include "detail/crc32.h"
 
 #ifdef ATBUS_MACRO_ENABLE_STATIC_ASSERT
 #include <type_traits>
@@ -54,8 +55,8 @@ namespace atbus {
             conf->keepalive = 60;
             conf->is_noblock = true;
             conf->is_nodelay = true;
-            conf->send_buffer_static = false;
-            conf->recv_buffer_static = false;
+            conf->send_buffer_static = 0;
+            conf->recv_buffer_static = 2; // 接收一般就一个正在处理的包，所以预留2个index足够了
 
             conf->send_buffer_max_size = 0;
             conf->send_buffer_limit_size = ATBUS_MACRO_MSG_LIMIT;
@@ -133,6 +134,19 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
+        int io_stream_run(io_stream_channel* channel, adapter::run_mode_t mode) {
+            if (NULL == channel) {
+                return EN_ATBUS_ERR_PARAMS;
+            }
+
+            channel->error_code = uv_run(io_stream_get_loop(channel), static_cast<uv_run_mode>(mode));
+            if (0 != channel->error_code) {
+                return EN_ATBUS_ERR_EV_RUN;
+            }
+
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
 
         static void io_stream_on_recv_alloc_fn(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
             io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(handle->data);
@@ -168,7 +182,7 @@ namespace atbus {
             assert(channel);
 
             if (nread <= 0) {
-                channel->error_code = nread;
+                channel->error_code = static_cast<int>(nread);
                 io_stream_channel_callback(
                     io_stream_callback_evt_t::EN_FN_RECVED,
                     channel,
@@ -186,7 +200,7 @@ namespace atbus {
 
             // head 阶段
             if (NULL == data || 0 == swrite) {
-                assert(nread <= sizeof(conn_raw_ptr->read_head.buffer) - conn_raw_ptr->read_head.len);
+                assert(static_cast<size_t>(nread) <= sizeof(conn_raw_ptr->read_head.buffer) - conn_raw_ptr->read_head.len);
                 conn_raw_ptr->read_head.len += static_cast<size_t>(nread); // 写数据计数
 
                 // 尝试解出所有的head数据
@@ -194,9 +208,10 @@ namespace atbus {
                 size_t buff_left_len = conn_raw_ptr->read_head.len;
 
                 // 可能包含多条消息
-                while (buff_left_len > 0) {
+                while (buff_left_len > sizeof(uint32_t)) {
                     uint64_t msg_len = 0;
-                    size_t vint_len = detail::fn::read_vint(msg_len, buff_start, buff_left_len);
+                    // 前4 字节为crc32
+                    size_t vint_len = detail::fn::read_vint(msg_len, buff_start + sizeof(uint32_t), buff_left_len - sizeof(uint32_t));
 
                     // 剩余数据不足以解动态长度整数，直接中断退出
                     if (0 == vint_len) {
@@ -204,23 +219,30 @@ namespace atbus {
                     }
 
                     // 如果读取vint成功，判定是否有小数据包。并对小数据包直接回调
-                    if (buff_left_len >= vint_len + msg_len) {
+                    if (buff_left_len >= sizeof(uint32_t) + vint_len + msg_len) {
                         channel->error_code = 0;
+                        uint32_t check_crc = atbus::detail::crc32(0, reinterpret_cast<unsigned char*>(buff_start) + sizeof(uint32_t) + vint_len, msg_len);
+                        uint32_t expect_crc;
+                        memcpy(&expect_crc, buff_start, sizeof(uint32_t));
+
                         io_stream_channel_callback(
                             io_stream_callback_evt_t::EN_FN_RECVED,
                             channel,
                             conn_raw_ptr,
-                            EN_ATBUS_ERR_SUCCESS,
-                            buff_start + vint_len,
+                            check_crc == expect_crc? EN_ATBUS_ERR_SUCCESS: EN_ATBUS_ERR_BAD_DATA,
+                            buff_start + sizeof(uint32_t) + vint_len,
                             msg_len
                         );
 
-                        buff_start += vint_len + msg_len;
-                        buff_left_len -= vint_len + msg_len;
+                        // crc32+vint+buffer
+                        buff_start += sizeof(uint32_t) + vint_len + msg_len;
+                        buff_left_len -= sizeof(uint32_t) + vint_len + msg_len;
                     } else {
                         // 大数据包，使用缓冲区，并且剩余数据一定是在一个包内
-                        if (EN_ATBUS_ERR_SUCCESS == conn_raw_ptr->read_buffers.push_back(data, msg_len)) {
-                            memcpy(data, buff_start + vint_len, buff_left_len - vint_len);
+                        // CRC32 也暂存在这里
+                        if (EN_ATBUS_ERR_SUCCESS == conn_raw_ptr->read_buffers.push_back(data, sizeof(uint32_t) + msg_len)) {
+                            memcpy(data, buff_start, sizeof(uint32_t)); // CRC32
+                            memcpy(reinterpret_cast<char*>(data) + sizeof(uint32_t), buff_start + sizeof(uint32_t) + vint_len, buff_left_len - sizeof(uint32_t) - vint_len);
 
                             buff_start += buff_left_len;
                             buff_left_len = 0; // 循环退出
@@ -247,18 +269,23 @@ namespace atbus {
                 conn_raw_ptr->read_buffers.pop_back(nread_s, false);
             }
 
-
             // 如果在大内存块缓冲区，判定回调
             conn_raw_ptr->read_buffers.front(data, sread, swrite);
             if (NULL != data && 0 == swrite) {
                 channel->error_code = 0;
+
+                // CRC校验和
+                uint32_t check_crc = atbus::detail::crc32(0, reinterpret_cast<unsigned char*>(data) + sizeof(uint32_t), sread - sizeof(uint32_t));
+                uint32_t expect_crc;
+                memcpy(&expect_crc, data, sizeof(uint32_t));
+
                 io_stream_channel_callback(
                     io_stream_callback_evt_t::EN_FN_RECVED,
                     channel,
                     conn_raw_ptr,
-                    EN_ATBUS_ERR_SUCCESS,
-                    data,
-                    sread
+                    check_crc == expect_crc? EN_ATBUS_ERR_SUCCESS: EN_ATBUS_ERR_BAD_DATA,
+                    reinterpret_cast<char*>(data) + sizeof(uint32_t),   // + crc32 header
+                    sread - sizeof(uint32_t)                            // - crc32 header
                 );
 
                 // 回调并释放缓冲区
@@ -367,14 +394,14 @@ namespace atbus {
 
 
             ret->read_buffers.set_limit(channel->conf.recv_buffer_max_size, 0);
-            if (channel->conf.recv_buffer_static) {
-                ret->read_buffers.set_mode(channel->conf.recv_buffer_max_size, 0);
+            if (channel->conf.recv_buffer_static > 0) {
+                ret->read_buffers.set_mode(channel->conf.recv_buffer_max_size, channel->conf.recv_buffer_static);
             }
             ret->read_head.len = 0;
 
             ret->write_buffers.set_limit(channel->conf.send_buffer_max_size, 0);
-            if (channel->conf.send_buffer_static) {
-                ret->write_buffers.set_mode(channel->conf.send_buffer_max_size, 0);
+            if (channel->conf.send_buffer_static > 0) {
+                ret->write_buffers.set_mode(channel->conf.send_buffer_max_size, channel->conf.send_buffer_static);
             }
 
             channel->conn_pool[fd] = ret;
@@ -738,7 +765,7 @@ namespace atbus {
             return EN_ATBUS_ERR_SCHEME;
         }
 
-        static struct io_stream_connect_async_data {
+        struct io_stream_connect_async_data {
             uv_connect_t req;
             channel_address_t addr;
             io_stream_channel* channel;
@@ -1007,31 +1034,36 @@ namespace atbus {
             size_t nread, nwrite;
 
             // 弹出丢失的回调
-            while(req != data) {
+            while(true) {
                 connection->write_buffers.front(data, nread, nwrite);
                 if (NULL == data || 0 == nwrite) {
                     break;
                 }
 
-                // nwrite = uv_write_t的大小+vint的大小+数据区长度
+                // nwrite = uv_write_t的大小+crc32+vint的大小+数据区长度
                 char* buff_start = reinterpret_cast<char*>(data);
-                buff_start += sizeof(uv_write_t);
+                buff_start += sizeof(uv_write_t) + sizeof(uint32_t);
                 uint64_t out;
-                size_t vint_len = detail::fn::read_vint(out, buff_start, nwrite - sizeof(uv_write_t));
+                size_t vint_len = detail::fn::read_vint(out, buff_start, nwrite - sizeof(uv_write_t) - sizeof(uint32_t));
 
-                assert(out == nwrite - vint_len - sizeof(uv_write_t));
+                assert(out == nwrite - vint_len - sizeof(uint32_t) - sizeof(uv_write_t));
 
                 io_stream_channel_callback(
                     io_stream_callback_evt_t::EN_FN_WRITEN,
                     connection->channel,
                     connection,
-                    EN_ATBUS_ERR_NODE_TIMEOUT,
+                    req == data? EN_ATBUS_ERR_SUCCESS: EN_ATBUS_ERR_NODE_TIMEOUT,
                     buff_start + vint_len,
-                    vint_len
+                    out
                 );
 
                 // 消除缓存
                 connection->write_buffers.pop_front(nwrite, true);
+
+                // 弹出结束
+                if (req == data) {
+                    break;
+                }
             }
             // libuv内部维护了一个发送队列，所以不需要再启动发送流程
         }
@@ -1043,8 +1075,8 @@ namespace atbus {
 
             char vint[16];
             size_t vint_len = detail::fn::write_vint(len, vint, sizeof(vint));
-            // 计算需要的内存块大小（uv_write_t的大小+vint的大小+len）
-            size_t total_buffer_size = sizeof(uv_write_t) + vint_len + len;
+            // 计算需要的内存块大小（uv_write_t的大小+crc32+vint的大小+len）
+            size_t total_buffer_size = sizeof(uv_write_t) + sizeof(uint32_t) + vint_len + len;
 
             // 判定内存限制
             void* data;
@@ -1058,13 +1090,20 @@ namespace atbus {
             req->data = connection;
             char* buff_start = reinterpret_cast<char*>(data);
 
+            // req
             buff_start += sizeof(uv_write_t);
-            memcpy(buff_start, vint, vint_len);
 
-            memcpy(buff_start + vint_len, buf, len);
+            // crc32
+            uint32_t crc32 = atbus::detail::crc32(0, reinterpret_cast<const unsigned char*>(buf), len);
+            memcpy(buff_start, &crc32, sizeof(uint32_t));
+
+            // vint
+            memcpy(buff_start + sizeof(uint32_t), vint, vint_len);
+            // buffer
+            memcpy(buff_start + sizeof(uint32_t) + vint_len, buf, len);
 
             // 调用写出函数，bufs[]会在libuv内部复制
-            uv_buf_t bufs[1] = { uv_buf_init(buff_start, vint_len + len) };
+            uv_buf_t bufs[1] = { uv_buf_init(buff_start, static_cast<unsigned int>(total_buffer_size - sizeof(uv_write_t))) };
             res = uv_write(req, connection->handle.get(), bufs, 1, io_stream_on_written_fn);
             if (0 != res) {
                 connection->channel->error_code = res;
@@ -1074,6 +1113,46 @@ namespace atbus {
 
             // libuv调用失败时，直接返回底层错误。因为libuv内部也维护了一个发送队列，所以不会受到TCP发送窗口的限制
             return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        void io_stream_show_channel(io_stream_channel* channel, std::ostream& out) {
+            if (NULL == channel) {
+                return;
+            }
+
+            out << "summary:" << std::endl <<
+                "connection number: " << channel->conn_pool.size() << std::endl <<
+                std::endl;
+
+            out << "configure:" << std::endl <<
+                "is_noblock: " << channel->conf.is_noblock << std::endl <<
+                "is_nodelay: " << channel->conf.is_nodelay << std::endl <<
+                "backlog: " << channel->conf.backlog << std::endl <<
+                "keepalive: " << channel->conf.keepalive << std::endl <<
+                "confirm_timeout: " << channel->conf.confirm_timeout << std::endl <<
+                "recv_buffer_limit_size(Bytes): " << channel->conf.recv_buffer_limit_size << std::endl <<
+                "recv_buffer_max_size(Bytes): " << channel->conf.recv_buffer_max_size << std::endl <<
+                "recv_buffer_static_max_number: " << channel->conf.recv_buffer_static << std::endl <<
+                "send_buffer_limit_size(Bytes): " << channel->conf.send_buffer_limit_size << std::endl <<
+                "send_buffer_max_size(Bytes): " << channel->conf.send_buffer_max_size << std::endl <<
+                "send_buffer_static_max_number: " << channel->conf.send_buffer_static << std::endl <<
+                std::endl;
+
+            out << "all connections:" << std::endl;
+            for (io_stream_channel::conn_pool_t::iterator iter = channel->conn_pool.begin();
+                iter != channel->conn_pool.end(); ++ iter) {
+                out << "\t" << iter->second->addr.address<< ":(status = "<< iter->second->status << ")" << std::endl;
+
+                out << "\t\twrite_buffers.cost_number: " << iter->second->write_buffers.limit().cost_number_ << std::endl;
+                out << "\t\twrite_buffers.cost_size: " << iter->second->write_buffers.limit().cost_size_ << std::endl;
+                out << "\t\twrite_buffers.limit_number: " << iter->second->write_buffers.limit().limit_number_ << std::endl;
+                out << "\t\twrite_buffers.limit_size: " << iter->second->write_buffers.limit().limit_size_ << std::endl;
+
+                out << "\t\tread_buffers.cost_number: " << iter->second->read_buffers.limit().cost_number_ << std::endl;
+                out << "\t\tread_buffers.cost_size: " << iter->second->read_buffers.limit().cost_size_ << std::endl;
+                out << "\t\tread_buffers.limit_number: " << iter->second->read_buffers.limit().limit_number_ << std::endl;
+                out << "\t\tread_buffers.limit_size: " << iter->second->read_buffers.limit().limit_size_ << std::endl;
+            }
         }
     }
 }

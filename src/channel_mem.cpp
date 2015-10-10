@@ -637,7 +637,7 @@ namespace atbus {
 
                 // 校验不通过
                 if (fast_check != block_head->fast_check) {
-                    ret = ret? ret: EN_ATBUS_ERR_NODE_BAD_BLOCK_FAST_CHECK;
+                    ret = ret? ret: EN_ATBUS_ERR_BAD_DATA;
                 }
 
             } while(false);
