@@ -13,6 +13,23 @@
 #include <cstdlib>
 #include <vector>
 
+#ifndef _MSC_VER
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#endif
+
+#ifndef MAX_PATH
+#ifdef _MAX_PATH
+#define MAX_PATH _MAX_PATH
+#elif defined(PATH_MAX)
+#define MAX_PATH PATH_MAX
+#else
+// 默认取Windows内定义的值，因为Unix like系统一般定得都比较大
+#define MAX_PATH 260
+#endif
+#endif
+
 #include "detail/std/smart_ptr.h"
 
 #include "detail/libatbus_error.h"
@@ -108,7 +125,7 @@ namespace atbus {
             channel->ev_loop = ev_loop;
             channel->is_loop_owner = false;
 
-            memset(channel->evt.callbacks, NULL, sizeof(channel->evt.callbacks));
+            memset(channel->evt.callbacks, 0, sizeof(channel->evt.callbacks));
 
             channel->error_code = 0;
             return EN_ATBUS_ERR_SUCCESS;
@@ -397,7 +414,7 @@ namespace atbus {
 
             ret = std::make_shared<io_stream_connection>();
             ret->handle = handle;
-            memset(ret->evt.callbacks, NULL, sizeof(ret->evt.callbacks));
+            memset(ret->evt.callbacks, 0, sizeof(ret->evt.callbacks));
             ret->status = io_stream_connection::EN_ST_CREATED;
 
 

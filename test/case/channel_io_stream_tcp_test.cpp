@@ -89,7 +89,7 @@ static void setup_channel(atbus::channel::io_stream_channel& channel, const char
 }
 
 
-static char* get_test_buffer() {
+/*static char* get_test_buffer() {
     static char ret[MAX_TEST_BUFFER_LEN] = {0};
     if (0 != ret[0]) {
         return ret;
@@ -100,15 +100,15 @@ static char* get_test_buffer() {
     }
 
     return ret;
-}
+}*/
 
 CASE_TEST(channel, io_stream_tcp_basic)
 {
     atbus::channel::io_stream_channel svr, cli;
     g_check_flag = 0;
 
-    setup_channel(svr, "ipv4://0.0.0.0:16387", NULL);
-    //setup_channel(svr, "ipv6://:::16387", NULL);
+    //setup_channel(svr, "ipv4://0.0.0.0:16387", NULL);
+    setup_channel(svr, "ipv6://:::16387", NULL);
     CASE_EXPECT_EQ(1, g_check_flag);
     CASE_EXPECT_NE(NULL, svr.ev_loop);
 
