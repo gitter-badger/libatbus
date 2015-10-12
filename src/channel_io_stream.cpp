@@ -931,16 +931,15 @@ namespace atbus {
                     async_data->req.data = async_data;
                     async_data->stream = sock_conn;
 
-                    sockaddr_in sock_addr;
-                    sockaddr_in6 sock_addr6;
+                    io_stream_sockaddr_switcher sock_addr;
                     const sockaddr* sock_addr_ptr = NULL;
 
                     if ('4' == addr.scheme[3]) {
-                        uv_ip4_addr(addr.host.c_str(), addr.port, &sock_addr);
-                        sock_addr_ptr = reinterpret_cast<sockaddr*>(&sock_addr);
+                        uv_ip4_addr(addr.host.c_str(), addr.port, &sock_addr.ipv4);
+                        sock_addr_ptr = &sock_addr.base;
                     } else {
-                        uv_ip6_addr(addr.host.c_str(), addr.port, &sock_addr6);
-                        sock_addr_ptr = reinterpret_cast<sockaddr*>(&sock_addr6);
+                        uv_ip6_addr(addr.host.c_str(), addr.port, &sock_addr.ipv6);
+                        sock_addr_ptr = &sock_addr.base;
                     }
 
                     io_stream_tcp_setup(channel, handle);
