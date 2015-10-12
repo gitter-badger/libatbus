@@ -605,7 +605,7 @@ namespace atbus {
         // listen 接口传入域名时的回调
         static void io_stream_dns_connection_cb(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
             io_stream_dns_async_data* async_data = NULL;
-            int listen_res = 0;
+            int listen_res = status;
             do {
                 async_data = reinterpret_cast<io_stream_dns_async_data*>(req->data);
                 assert(async_data);
@@ -615,31 +615,35 @@ namespace atbus {
                 }
 
                 if (NULL == async_data) {
+                    listen_res = -1;
                     break;
                 }
 
                 if (NULL == res) {
+                    listen_res = -1;
                     break;
                 }
 
                 if(AF_INET == res->ai_family) {
-                    sockaddr_in* res_c = reinterpret_cast<sockaddr_in*>(res);
+                    sockaddr_in* res_c = reinterpret_cast<sockaddr_in*>(res->ai_addr);
                     char ip[17] = { 0 };
                     uv_ip4_name(res_c, ip, sizeof(ip));
                     make_address("ipv4", ip, async_data->addr.port, async_data->addr);
                     listen_res = io_stream_listen(async_data->channel, async_data->addr, async_data->callback);
-                } else {
-                    sockaddr_in6* res_c = reinterpret_cast<sockaddr_in6*>(res);
+                } else if (AF_INET6 == res->ai_family) {
+                    sockaddr_in6* res_c = reinterpret_cast<sockaddr_in6*>(res->ai_addr);
                     char ip[40] = { 0 };
                     uv_ip6_name(res_c, ip, sizeof(ip));
                     make_address("ipv6", ip, async_data->addr.port, async_data->addr);
                     listen_res = io_stream_listen(async_data->channel, async_data->addr, async_data->callback);
+                } else {
+                    listen_res = -1;
                 }
             } while (false);
 
             // 接口调用不成功则要调用回调函数
             if (0 != listen_res && NULL != async_data->callback) {
-                async_data->callback(async_data->channel, NULL, EN_ATBUS_ERR_DNS_GETADDR_FAILED, NULL, 0);
+                async_data->callback(async_data->channel, NULL, EN_ATBUS_ERR_DNS_GETADDR_FAILED, res, 0);
             }
 
             if (NULL != req) {
@@ -836,7 +840,7 @@ namespace atbus {
         // listen 接口传入域名时的回调
         static void io_stream_dns_connect_cb(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
             io_stream_dns_async_data* async_data = NULL;
-            int listen_res = 0;
+            int listen_res = status;
             do {
                 async_data = reinterpret_cast<io_stream_dns_async_data*>(req->data);
                 assert(async_data);
@@ -846,31 +850,35 @@ namespace atbus {
                 }
 
                 if (NULL == async_data) {
+                    listen_res = -1;
                     break;
                 }
 
                 if (NULL == res) {
+                    listen_res = -1;
                     break;
                 }
 
                 if (AF_INET == res->ai_family) {
-                    sockaddr_in* res_c = reinterpret_cast<sockaddr_in*>(res);
+                    sockaddr_in* res_c = reinterpret_cast<sockaddr_in*>(res->ai_addr);
                     char ip[17] = { 0 };
                     uv_ip4_name(res_c, ip, sizeof(ip));
                     make_address("ipv4", ip, async_data->addr.port, async_data->addr);
                     listen_res = io_stream_connect(async_data->channel, async_data->addr, async_data->callback);
-                } else {
-                    sockaddr_in6* res_c = reinterpret_cast<sockaddr_in6*>(res);
+                } else if (AF_INET6 == res->ai_family) {
+                    sockaddr_in6* res_c = reinterpret_cast<sockaddr_in6*>(res->ai_addr);
                     char ip[40] = { 0 };
                     uv_ip6_name(res_c, ip, sizeof(ip));
                     make_address("ipv6", ip, async_data->addr.port, async_data->addr);
                     listen_res = io_stream_connect(async_data->channel, async_data->addr, async_data->callback);
+                } else {
+                    listen_res = -1;
                 }
             } while (false);
 
             // 接口调用不成功则要调用回调函数
             if (0 != listen_res && NULL != async_data->callback) {
-                async_data->callback(async_data->channel, NULL, EN_ATBUS_ERR_DNS_GETADDR_FAILED, NULL, 0);
+                async_data->callback(async_data->channel, NULL, EN_ATBUS_ERR_DNS_GETADDR_FAILED, res, 0);
             }
 
             if (NULL != req) {

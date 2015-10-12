@@ -76,7 +76,6 @@ static void connected_callback_test_fn(
 }
 
 static void setup_channel(atbus::channel::io_stream_channel& channel, const char* listen, const char* conn) {
-    atbus::channel::io_stream_init(&channel, NULL, NULL);
     atbus::channel::channel_address_t addr;
 
     int res = 0;
@@ -110,9 +109,11 @@ static void setup_channel(atbus::channel::io_stream_channel& channel, const char
 CASE_TEST(channel, io_stream_tcp_basic)
 {
     atbus::channel::io_stream_channel svr, cli;
+    atbus::channel::io_stream_init(&svr, NULL, NULL);
+    atbus::channel::io_stream_init(&cli, NULL, NULL);
+
     g_check_flag = 0;
 
-    //setup_channel(svr, "ipv4://0.0.0.0:16387", NULL);
     setup_channel(svr, "ipv6://:::16387", NULL);
     CASE_EXPECT_EQ(1, g_check_flag);
     CASE_EXPECT_NE(NULL, svr.ev_loop);
