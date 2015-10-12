@@ -19,17 +19,6 @@
 #include <sys/stat.h>
 #endif
 
-#ifndef MAX_PATH
-#ifdef _MAX_PATH
-#define MAX_PATH _MAX_PATH
-#elif defined(PATH_MAX)
-#define MAX_PATH PATH_MAX
-#else
-// 默认取Windows内定义的值，因为Unix like系统一般定得都比较大
-#define MAX_PATH 260
-#endif
-#endif
-
 #include "detail/std/smart_ptr.h"
 
 #include "detail/libatbus_error.h"
@@ -43,12 +32,30 @@
 
 #endif
 
+
+#ifndef MAX_PATH
+#ifdef _MAX_PATH
+#define MAX_PATH _MAX_PATH
+#elif defined(PATH_MAX)
+#define MAX_PATH PATH_MAX
+#else
+// 默认取Windows内定义的值，因为Unix like系统一般定得都比较大
+#define MAX_PATH 260
+#endif
+#endif
+
 namespace atbus {
     namespace channel {
 
 #ifdef ATBUS_MACRO_ENABLE_STATIC_ASSERT
         static_assert(std::is_pod<io_stream_conf>::value, "io_stream_conf should be a pod type");
 #endif
+
+        union io_stream_sockaddr_switcher {
+            sockaddr     base;
+            sockaddr_in  ipv4;
+            sockaddr_in6 ipv6;
+        };
 
         static inline void io_stream_channel_callback(
             io_stream_callback_evt_t::mem_fn_t fn, io_stream_channel* channel, io_stream_connection* conn_evt,
@@ -151,6 +158,9 @@ namespace atbus {
             }
 
             if (true == channel->is_loop_owner && NULL != channel->ev_loop) {
+                uv_stop(channel->ev_loop);
+                // 停止时阻塞操作，保证资源正常释放
+                uv_run(channel->ev_loop, UV_RUN_DEFAULT);
                 uv_loop_close(channel->ev_loop);
                 free(channel->ev_loop);
             }
@@ -499,8 +509,8 @@ namespace atbus {
             return tcp_conn;
         }
 
-        // ipv4 收到连接
-        static void io_stream_tcp_connection_cb_ipv4(uv_stream_t* req, int status) {
+        // tcp/ip 收到连接
+        static void io_stream_tcp_connection_cb(uv_stream_t* req, int status) {
             io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(req->data);
             assert(conn_raw_ptr);
             io_stream_channel* channel = conn_raw_ptr->channel;
@@ -517,48 +527,22 @@ namespace atbus {
 
                 conn->status = io_stream_connection::EN_ST_CONNECTED;
 
-                struct sockaddr_in sock_addr;
-                int name_len = sizeof(sockaddr_in);
-                uv_tcp_getpeername(tcp_conn, reinterpret_cast<sockaddr*>(&sock_addr), &name_len);
+                union io_stream_sockaddr_switcher sock_addr;
+                int name_len = sizeof(sock_addr);
+                uv_tcp_getpeername(tcp_conn, &sock_addr.base, &name_len);
 
-                char ip[17] = { 0 };
-                uv_ip4_name(&sock_addr, ip, sizeof(ip));
-                make_address("ipv4", ip, sock_addr.sin_port, conn->addr);
+                char ip[40] = { 0 };
+                if (sock_addr.base.sa_family == AF_INET6) {
+                    uv_ip6_name(&sock_addr.ipv6, ip, sizeof(ip));
+                    make_address("ipv6", ip, sock_addr.ipv6.sin6_port, conn->addr);
+                } else {
+                    uv_ip4_name(&sock_addr.ipv4, ip, sizeof(ip));
+                    make_address("ipv4", ip, sock_addr.ipv4.sin_port, conn->addr);
+                }
             } while (false);
 
             // 回调函数，如果发起连接接口调用成功一定要调用回调函数
             io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), status, NULL, 0);
-        }
-
-        // ipv6 收到连接
-        static void io_stream_tcp_connection_cb_ipv6(uv_stream_t* req, int status) {
-            io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(req->data);
-            assert(conn_raw_ptr);
-            io_stream_channel* channel = conn_raw_ptr->channel;
-            assert(channel);
-
-            std::shared_ptr<adapter::stream_t> recv_conn;
-            std::shared_ptr<io_stream_connection> conn;
-
-            do {
-                adapter::tcp_t* tcp_conn = io_stream_tcp_connection_common(conn, req, status);
-                if (NULL == tcp_conn || !conn) {
-                    break;
-                }
-
-                conn->status = io_stream_connection::EN_ST_CONNECTED;
-
-                struct sockaddr_in6 sock_addr;
-                int name_len = sizeof(sockaddr_in6);
-                uv_tcp_getpeername(tcp_conn, reinterpret_cast<sockaddr*>(&sock_addr), &name_len);
-
-                char ip[40] = { 0 };
-                uv_ip6_name(&sock_addr, ip, sizeof(ip));
-                make_address("ipv6", ip, sock_addr.sin6_port, conn->addr);
-            } while (false);
-
-            // 回调函数，如果发起连接接口调用成功一定要调用回调函数
-            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn.get(), status, NULL, 0);
         }
 
         // pipe 收到连接
@@ -703,7 +687,7 @@ namespace atbus {
                             break;
                         }
 
-                        if (0 != (channel->error_code = uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_tcp_connection_cb_ipv4))) {
+                        if (0 != (channel->error_code = uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_tcp_connection_cb))) {
                             ret = EN_ATBUS_ERR_SOCK_LISTEN_FAILED;
                             break;
                         }
@@ -716,7 +700,7 @@ namespace atbus {
                             break;
                         }
 
-                        if (0 != (channel->error_code = uv_listen(reinterpret_cast<adapter::stream_t*>(&handle), channel->conf.backlog, io_stream_tcp_connection_cb_ipv6))) {
+                        if (0 != (channel->error_code = uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_tcp_connection_cb))) {
                             ret = EN_ATBUS_ERR_SOCK_LISTEN_FAILED;
                             break;
                         }
