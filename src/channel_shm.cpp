@@ -112,7 +112,7 @@ namespace atbus {
             size_t page_size = static_cast<std::size_t>(si.dwPageSize);
 
             char shm_file_name[64] = {0};
-            sprintf(shm_file_name, "libatbus_win_shm_%ld.bus", shm_key);
+            ATBUS_FUNC_SNPRINTF(shm_file_name, sizeof(shm_file_name), "libatbus_win_shm_%ld.bus", shm_key);
 
             // 首先尝试直接打开
             shm_record.handle = OpenFileMapping(
@@ -151,7 +151,7 @@ namespace atbus {
                 NULL,                       // default security
                 PAGE_READWRITE,             // read/write access
                 0,                          // maximum object size (high-order DWORD)
-                len,                        // maximum object size (low-order DWORD)
+                static_cast<DWORD>(len),    // maximum object size (low-order DWORD)
                 ATBUS_VC_TEXT(shm_file_name)// name of mapping object
             );
 

@@ -67,8 +67,8 @@ namespace atbus {
         struct io_stream_connection;
         struct io_stream_channel;
         typedef void(*io_stream_callback_t)(
-            io_stream_channel* channel,         // 事件触发的channel
-            io_stream_connection* connection,   // 事件触发的连接
+            const io_stream_channel* channel,         // 事件触发的channel
+            const io_stream_connection* connection,   // 事件触发的连接
             int status,                         // libuv传入的转态码
             void*,                              // 额外参数(不同事件不同含义)
             size_t s                            // 额外参数长度
@@ -90,7 +90,13 @@ namespace atbus {
         // 以下不是POD类型，所以不得不暴露出来
         struct io_stream_connection {
             channel_address_t                   addr;
-            std::shared_ptr<adapter::stream_t>  handle;            // 流设备
+            std::shared_ptr<adapter::stream_t>  handle;             // 流设备
+            adapter::fd_t                       fd;                 // 文件描述符
+            typedef union {
+                uv_shutdown_t shutdown;
+            } conn_req_t;
+            conn_req_t req;
+
             typedef enum {
                 EN_ST_CREATED = 0,
                 EN_ST_CONNECTING,
@@ -102,7 +108,7 @@ namespace atbus {
             io_stream_channel*                  channel;
 
             // 事件响应
-            io_stream_callback_evt_t            evt;
+            mutable io_stream_callback_evt_t            evt;
 
             // 数据区域
             detail::buffer_manager read_buffers;            // 读数据缓冲区(两种Buffer管理方式，一种动态，一种静态)
@@ -144,7 +150,7 @@ namespace atbus {
             conn_pool_t conn_pool;
 
             // 事件响应
-            io_stream_callback_evt_t            evt;
+            mutable io_stream_callback_evt_t            evt;
 
             int error_code; // 记录外部的错误码
             // 统计信息

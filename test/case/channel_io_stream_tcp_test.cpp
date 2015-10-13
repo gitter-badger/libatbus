@@ -19,8 +19,8 @@ static const size_t MAX_TEST_BUFFER_LEN = 1024 * 32;
 static int g_check_flag = 0;
 
 static void accepted_callback_test_fn(
-    atbus::channel::io_stream_channel* channel,         // 事件触发的channel
-    atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
     int status,                         // libuv传入的转态码
     void*,                              // 额外参数(不同事件不同含义)
     size_t s                            // 额外参数长度
@@ -39,8 +39,8 @@ static void accepted_callback_test_fn(
 }
 
 static void listen_callback_test_fn(
-    atbus::channel::io_stream_channel* channel,         // 事件触发的channel
-    atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
     int status,                         // libuv传入的转态码
     void*,                              // 额外参数(不同事件不同含义)
     size_t s                            // 额外参数长度
@@ -56,8 +56,8 @@ static void listen_callback_test_fn(
 }
 
 static void connected_callback_test_fn(
-    atbus::channel::io_stream_channel* channel,         // 事件触发的channel
-    atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
     int status,                         // libuv传入的转态码
     void*,                              // 额外参数(不同事件不同含义)
     size_t s                            // 额外参数长度
@@ -131,6 +131,6 @@ CASE_TEST(channel, io_stream_tcp_basic)
 
     atbus::channel::io_stream_close(&svr);
     atbus::channel::io_stream_close(&cli);
-    //CASE_EXPECT_EQ(0, uv_loop_alive(svr.ev_loop));
-    //CASE_EXPECT_EQ(0, uv_loop_alive(cli.ev_loop));
+    CASE_EXPECT_EQ(0, svr.conn_pool.size());
+    CASE_EXPECT_EQ(0, cli.conn_pool.size());
 }

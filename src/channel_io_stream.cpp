@@ -145,23 +145,23 @@ namespace atbus {
 
             // 释放所有连接
             {
-                std::vector<adapter::fd_t> pending_release;
+                std::vector<io_stream_connection*> pending_release;
                 pending_release.reserve(channel->conn_pool.size());
                 for (io_stream_channel::conn_pool_t::iterator iter = channel->conn_pool.begin();
                      iter != channel->conn_pool.end(); ++iter) {
-                    pending_release.push_back(iter->first);
+                    pending_release.push_back(iter->second.get());
                 }
 
                 for (size_t i = 0; i < pending_release.size(); ++i) {
-                    io_stream_disconnect_fd(channel, pending_release[i], NULL);
+                    io_stream_disconnect(channel, pending_release[i], NULL);
                 }
             }
 
             if (true == channel->is_loop_owner && NULL != channel->ev_loop) {
-                uv_stop(channel->ev_loop);
+                uv_loop_close(channel->ev_loop);
                 // 停止时阻塞操作，保证资源正常释放
                 uv_run(channel->ev_loop, UV_RUN_DEFAULT);
-                uv_loop_close(channel->ev_loop);
+                uv_stop(channel->ev_loop);
                 free(channel->ev_loop);
             }
 
@@ -232,6 +232,7 @@ namespace atbus {
             void *data = NULL;
             size_t sread = 0, swrite = 0;
             conn_raw_ptr->read_buffers.back(data, sread, swrite);
+            bool is_free = false;
 
             // head 阶段
             if (NULL == data || 0 == swrite) {
@@ -283,9 +284,10 @@ namespace atbus {
                             buff_left_len = 0; // 循环退出
                         } else {
                             // 追加大缓冲区失败，可能是到达缓冲区限制
-                            // TODO 读缓冲区一般只有一个正在处理的数据包，如果发生创建失败则是数据错误或者这个包就是超出大小限制的
-                            // TODO 这时候是否应该通知上层然后直接断开连接？
-                            // 强制中断
+                            // 读缓冲区一般只有一个正在处理的数据包，如果发生创建失败则是数据错误或者这个包就是超出大小限制的
+                            is_free = true;
+                            buff_start += sizeof(uint32_t) + vint_len;
+                            buff_left_len -= sizeof(uint32_t) + vint_len;
                             break;
                         }
                     }
@@ -325,6 +327,20 @@ namespace atbus {
 
                 // 回调并释放缓冲区
                 conn_raw_ptr->read_buffers.pop_front(0, true);
+            }
+
+            if (is_free) {
+                io_stream_channel_callback(
+                    io_stream_callback_evt_t::EN_FN_RECVED,
+                    channel,
+                    conn_raw_ptr,
+                    EN_ATBUS_ERR_INVALID_SIZE,
+                    conn_raw_ptr->read_head.buffer,
+                    conn_raw_ptr->read_head.len
+                );
+
+                // 强制中断
+                io_stream_disconnect(channel, conn_raw_ptr, NULL);
             }
         }
 
@@ -385,23 +401,17 @@ namespace atbus {
         }
 
         static void io_stream_connection_on_close(uv_handle_t* handle) {
-            adapter::fd_t fd;
             io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(handle->data);
-            assert(conn_raw_ptr);
+            // 连接尚未初始化完毕，直接退出
+            if (NULL == conn_raw_ptr) {
+                return;
+            }
+
             io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
 
             io_stream_channel::conn_pool_t::iterator iter = channel->conn_pool.end();
-            if (0 == uv_fileno(handle, &fd)) {
-                 iter = channel->conn_pool.find(fd);
-            } else {
-                // 出现错误，需要使用其他方式查找handle
-                for (iter = channel->conn_pool.begin(); iter != channel->conn_pool.end(); ++ iter) {
-                    if (reinterpret_cast<uv_handle_t*>(iter->second->handle.get()) == handle) {
-                        break;
-                    }
-                }
-            }
+            iter = channel->conn_pool.find(conn_raw_ptr->fd);
 
             if (iter != channel->conn_pool.end()) {
                 iter->second->status = io_stream_connection::EN_ST_DISCONNECTIED;
@@ -417,13 +427,19 @@ namespace atbus {
                 return ret;
             }
 
-            adapter::fd_t fd;
-            if (0 != uv_fileno(reinterpret_cast<const uv_handle_t*>(handle.get()), &fd)) {
+            ret = std::make_shared<io_stream_connection>();
+            if(!ret) {
                 return ret;
             }
 
-            ret = std::make_shared<io_stream_connection>();
+            if (0 != uv_fileno(reinterpret_cast<const uv_handle_t*>(handle.get()), &ret->fd)) {
+                ret.reset();
+                return ret;
+            }
+
             ret->handle = handle;
+            handle->data = ret.get();
+
             memset(ret->evt.callbacks, 0, sizeof(ret->evt.callbacks));
             ret->status = io_stream_connection::EN_ST_CREATED;
 
@@ -439,7 +455,7 @@ namespace atbus {
                 ret->write_buffers.set_mode(channel->conf.send_buffer_max_size, channel->conf.send_buffer_static);
             }
 
-            channel->conn_pool[fd] = ret;
+            channel->conn_pool[ret->fd] = ret;
             ret->channel = channel;
 
             // 监听关闭事件，用于释放资源
@@ -456,8 +472,8 @@ namespace atbus {
         static void io_stream_delete_stream_fn(adapter::stream_t* handle) {
             T* real_conn = reinterpret_cast<T*>(handle);
 
-            if( 0 == uv_is_closing(reinterpret_cast<adapter::handle_t*>(handle))) {
-                uv_close(reinterpret_cast<adapter::handle_t*>(handle), NULL);
+            if( NULL != handle->data && 0 == uv_is_closing(reinterpret_cast<adapter::handle_t*>(handle))) {
+                uv_close(reinterpret_cast<adapter::handle_t*>(handle), io_stream_connection_on_close);
             }
 
             delete real_conn;
@@ -500,7 +516,7 @@ namespace atbus {
             );
 
             if (!conn) {
-                uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), NULL);
+                uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), io_stream_connection_on_close);
                 return NULL;
             }
 
@@ -575,7 +591,7 @@ namespace atbus {
                 );
 
                 if (!conn) {
-                    uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), NULL);
+                    uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), io_stream_connection_on_close);
                     break;
                 }
 
@@ -724,7 +740,7 @@ namespace atbus {
                     return ret;
                 } while (false);
 
-                uv_close(reinterpret_cast<uv_handle_t*>(handle), NULL);
+                uv_close(reinterpret_cast<uv_handle_t*>(handle), io_stream_connection_on_close);
                 return ret;
             } else if (0 == ATBUS_FUNC_STRNCASE_CMP("unix", addr.scheme.c_str(), 4)) {
                 std::shared_ptr<adapter::stream_t> listen_conn;
@@ -758,7 +774,7 @@ namespace atbus {
                     return ret;
                 } while (false);
 
-                uv_close(reinterpret_cast<uv_handle_t*>(handle), NULL);
+                uv_close(reinterpret_cast<uv_handle_t*>(handle), io_stream_connection_on_close);
                 return ret;
             } else if (0 == ATBUS_FUNC_STRNCASE_CMP("dns", addr.scheme.c_str(), 3)) {
                 uv_getaddrinfo_t* req = new uv_getaddrinfo_t();
@@ -957,7 +973,7 @@ namespace atbus {
                     delete async_data;
                 }
 
-                uv_close(reinterpret_cast<uv_handle_t*>(handle), NULL);
+                uv_close(reinterpret_cast<uv_handle_t*>(handle), io_stream_connection_on_close);
                 return ret;
             } else if (0 == ATBUS_FUNC_STRNCASE_CMP("unix", addr.scheme.c_str(), 4)) {
                 std::shared_ptr<adapter::stream_t> pipe_conn;
@@ -995,7 +1011,7 @@ namespace atbus {
                     delete async_data;
                 }
                 
-                uv_close(reinterpret_cast<uv_handle_t*>(handle), NULL);
+                uv_close(reinterpret_cast<uv_handle_t*>(handle), io_stream_connection_on_close);
                 return ret;
                 
             } else if (0 == ATBUS_FUNC_STRNCASE_CMP("dns", addr.scheme.c_str(), 3)) {
@@ -1033,7 +1049,7 @@ namespace atbus {
 
             connection->evt.callbacks[io_stream_callback_evt_t::EN_FN_DISCONNECTED] = callback;
 
-            uv_close( reinterpret_cast<adapter::handle_t*>(connection->handle.get()), NULL);
+            uv_close(reinterpret_cast<uv_handle_t*>(connection->handle.get()), io_stream_connection_on_close);
             return EN_ATBUS_ERR_SUCCESS;
         }
 
