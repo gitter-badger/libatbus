@@ -95,12 +95,12 @@ CASE_TEST(buffer, buffer_block)
     p->pop(50);
     CASE_EXPECT_EQ(49, p->size());
     CASE_EXPECT_EQ(99, p->raw_size());
-    CASE_EXPECT_EQ(atbus::detail::fn::buffer_step(p->raw_data(), 50), p->data());
+    CASE_EXPECT_EQ(atbus::detail::fn::buffer_next(p->raw_data(), 50), p->data());
     CASE_EXPECT_NE(p->raw_data(), p->data());
 
     p->pop(100);
     CASE_EXPECT_EQ(0, p->size());
-    CASE_EXPECT_EQ(atbus::detail::fn::buffer_step(p->raw_data(), 99), p->data());
+    CASE_EXPECT_EQ(atbus::detail::fn::buffer_next(p->raw_data(), 99), p->data());
 
     atbus::detail::buffer_block::free(p);
 
@@ -115,8 +115,8 @@ CASE_TEST(buffer, buffer_block)
     size_t fs = atbus::detail::buffer_block::full_size(256);
     next_free = atbus::detail::buffer_block::create(buf, sizeof(buf), 256);
     p = reinterpret_cast<atbus::detail::buffer_block*>(buf);
-    CASE_EXPECT_EQ(atbus::detail::fn::buffer_step(p->raw_data(), 256), next_free);
-    CASE_EXPECT_EQ(atbus::detail::fn::buffer_step(buf, fs), next_free);
+    CASE_EXPECT_EQ(atbus::detail::fn::buffer_next(p->raw_data(), 256), next_free);
+    CASE_EXPECT_EQ(atbus::detail::fn::buffer_next(buf, fs), next_free);
 
     memset(p->data(), -1, p->size());
     CASE_EXPECT_EQ(buf[fs], 0);
@@ -221,7 +221,7 @@ CASE_TEST(buffer, dynamic_buffer_manager_bf)
 
         res = mgr.front(pointer, sr, s);
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, res);
-        CASE_EXPECT_EQ(pointer, atbus::detail::fn::buffer_step(check_ptr[2], 10));
+        CASE_EXPECT_EQ(pointer, atbus::detail::fn::buffer_next(check_ptr[2], 10));
         CASE_EXPECT_EQ(7, s);
         CASE_EXPECT_EQ(*reinterpret_cast<char*>(pointer), -1);
 
@@ -343,7 +343,7 @@ CASE_TEST(buffer, static_buffer_manager_bf)
 
         res = mgr.front(pointer, sr, s);
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, res);
-        CASE_EXPECT_EQ(pointer, atbus::detail::fn::buffer_step(check_ptr[2], 10));
+        CASE_EXPECT_EQ(pointer, atbus::detail::fn::buffer_next(check_ptr[2], 10));
         CASE_EXPECT_EQ(7, s);
         CASE_EXPECT_EQ(*reinterpret_cast<char*>(pointer), -1);
 
@@ -551,7 +551,7 @@ CASE_TEST(buffer, dynamic_buffer_manager_fb)
 
         res = mgr.back(pointer, sr, s);
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, res);
-        CASE_EXPECT_EQ(pointer, atbus::detail::fn::buffer_step(check_ptr[2], 10));
+        CASE_EXPECT_EQ(pointer, atbus::detail::fn::buffer_next(check_ptr[2], 10));
         CASE_EXPECT_EQ(7, s);
         CASE_EXPECT_EQ(*reinterpret_cast<char*>(pointer), -1);
 
@@ -673,7 +673,7 @@ CASE_TEST(buffer, static_buffer_manager_fb)
 
         res = mgr.back(pointer, sr, s);
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, res);
-        CASE_EXPECT_EQ(pointer, atbus::detail::fn::buffer_step(check_ptr[2], 10));
+        CASE_EXPECT_EQ(pointer, atbus::detail::fn::buffer_next(check_ptr[2], 10));
         CASE_EXPECT_EQ(7, s);
         CASE_EXPECT_EQ(*reinterpret_cast<char*>(pointer), -1);
 

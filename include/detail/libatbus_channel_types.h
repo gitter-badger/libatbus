@@ -92,10 +92,6 @@ namespace atbus {
             channel_address_t                   addr;
             std::shared_ptr<adapter::stream_t>  handle;             // 流设备
             adapter::fd_t                       fd;                 // 文件描述符
-            typedef union {
-                uv_shutdown_t shutdown;
-            } conn_req_t;
-            conn_req_t req;
 
             typedef enum {
                 EN_ST_CREATED = 0,

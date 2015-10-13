@@ -216,7 +216,13 @@ namespace atbus {
             io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
 
-            if (nread <= 0) {
+            // 读取完或EAGAIN，直接忽略即可
+            if (0 == nread) {
+                return;
+            }
+
+            // 网络错误
+            if (nread < 0) {
                 channel->error_code = static_cast<int>(nread);
                 io_stream_channel_callback(
                     io_stream_callback_evt_t::EN_FN_RECVED,
@@ -226,6 +232,11 @@ namespace atbus {
                     NULL,
                     0
                 );
+
+                // EOF则关闭
+                if (UV_EOF == nread) {
+                    io_stream_disconnect(channel, conn_raw_ptr, NULL);
+                }
                 return;
             }
 
@@ -279,6 +290,7 @@ namespace atbus {
                         if (EN_ATBUS_ERR_SUCCESS == conn_raw_ptr->read_buffers.push_back(data, sizeof(uint32_t) + msg_len)) {
                             memcpy(data, buff_start, sizeof(uint32_t)); // CRC32
                             memcpy(reinterpret_cast<char*>(data) + sizeof(uint32_t), buff_start + sizeof(uint32_t) + vint_len, buff_left_len - sizeof(uint32_t) - vint_len);
+                            conn_raw_ptr->read_buffers.pop_back(buff_left_len - vint_len, false); // vint_len不用保存
 
                             buff_start += buff_left_len;
                             buff_left_len = 0; // 循环退出
@@ -310,6 +322,7 @@ namespace atbus {
             conn_raw_ptr->read_buffers.front(data, sread, swrite);
             if (NULL != data && 0 == swrite) {
                 channel->error_code = 0;
+                data = detail::fn::buffer_prev(data, sread);
 
                 // CRC校验和
                 uint32_t check_crc = atbus::detail::crc32(0, reinterpret_cast<unsigned char*>(data) + sizeof(uint32_t), sread - sizeof(uint32_t));
@@ -330,14 +343,16 @@ namespace atbus {
             }
 
             if (is_free) {
-                io_stream_channel_callback(
-                    io_stream_callback_evt_t::EN_FN_RECVED,
-                    channel,
-                    conn_raw_ptr,
-                    EN_ATBUS_ERR_INVALID_SIZE,
-                    conn_raw_ptr->read_head.buffer,
-                    conn_raw_ptr->read_head.len
-                );
+                if (conn_raw_ptr->read_head.len > 0) {
+                    io_stream_channel_callback(
+                        io_stream_callback_evt_t::EN_FN_RECVED,
+                        channel,
+                        conn_raw_ptr,
+                        EN_ATBUS_ERR_INVALID_SIZE,
+                        conn_raw_ptr->read_head.buffer,
+                        conn_raw_ptr->read_head.len
+                        );
+                }
 
                 // 强制中断
                 io_stream_disconnect(channel, conn_raw_ptr, NULL);

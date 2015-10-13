@@ -17,8 +17,11 @@
 namespace atbus {
     namespace detail {
         namespace fn {
-            void* buffer_step(void* pointer, size_t step);
-            const void* buffer_step(const void* pointer, size_t step);
+            void* buffer_next(void* pointer, size_t step);
+            const void* buffer_next(const void* pointer, size_t step);
+
+            void* buffer_prev(void* pointer, size_t step);
+            const void* buffer_prev(const void* pointer, size_t step);
 
             size_t buffer_offset(const void* l, const void* r);
 

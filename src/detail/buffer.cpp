@@ -14,12 +14,20 @@ namespace atbus {
     namespace detail {
 
         namespace fn {
-            void* buffer_step(void* pointer, size_t step) {
+            void* buffer_next(void* pointer, size_t step) {
                 return reinterpret_cast<char*>(pointer) + step;
             }
 
-            const void* buffer_step(const void* pointer, size_t step) {
+            const void* buffer_next(const void* pointer, size_t step) {
                 return reinterpret_cast<const char*>(pointer) + step;
+            }
+
+            void* buffer_prev(void* pointer, size_t step) {
+                return reinterpret_cast<char*>(pointer) - step;
+            }
+
+            const void* buffer_prev(const void* pointer, size_t step) {
+                return reinterpret_cast<const char*>(pointer) - step;
             }
 
             size_t buffer_offset(const void* l, const void* r) {
@@ -84,11 +92,11 @@ namespace atbus {
         }
 
         void* buffer_block::data() {
-            return fn::buffer_step(pointer_, used_);
+            return fn::buffer_next(pointer_, used_);
         }
 
         const void* buffer_block::data() const {
-            return fn::buffer_step(pointer_, used_);
+            return fn::buffer_next(pointer_, used_);
         }
 
         const void* buffer_block::raw_data() const {
@@ -164,7 +172,7 @@ namespace atbus {
                 return NULL;
             }
 
-            return fn::buffer_step(p->pointer_, p->size_);
+            return fn::buffer_next(p->pointer_, p->size_);
         }
 
         size_t buffer_block::padding_size(size_t s) {
@@ -343,14 +351,14 @@ namespace atbus {
             }
 
             if (tail >= head) { // .... head NNNNNN tail ....
-                size_t free_len = fn::buffer_offset(tail, fn::buffer_step(static_buffer_.buffer_, static_buffer_.size_));
+                size_t free_len = fn::buffer_offset(tail, fn::buffer_next(static_buffer_.buffer_, static_buffer_.size_));
 
                 if (free_len >= fs) { // .... head NNNNNN old_tail NN new_tail ....
                     void* next_free = buffer_block::create(tail, free_len, s);
                     if (NULL == next_free) {
                         return EN_ATBUS_ERR_MALLOC;
                     }
-                    assert(fn::buffer_step(static_buffer_.buffer_, static_buffer_.size_) >= next_free);
+                    assert(fn::buffer_next(static_buffer_.buffer_, static_buffer_.size_) >= next_free);
 
                     add_tail();
                     assign_tail(next_free);
@@ -425,7 +433,7 @@ namespace atbus {
             if (tail >= head) { // .... head NNNNNN tail ....
                 size_t free_len = fn::buffer_offset(head, static_buffer_.buffer_);
                 if (free_len >= fs) { // .... new_head NN old_head NNNNNN tail ....
-                    void* buffer_start = fn::buffer_step(static_buffer_.buffer_, free_len - fs);
+                    void* buffer_start = fn::buffer_next(static_buffer_.buffer_, free_len - fs);
                     void* next_free = buffer_block::create(buffer_start, fs, s);
                     if (NULL == next_free) {
                         return EN_ATBUS_ERR_MALLOC;
@@ -434,17 +442,17 @@ namespace atbus {
                     sub_head(buffer_start);
 
                 } else { // ... old_head NNNNNN tail .... new_head NN
-                    free_len = fn::buffer_offset(tail, fn::buffer_step(static_buffer_.buffer_, static_buffer_.size_));
+                    free_len = fn::buffer_offset(tail, fn::buffer_next(static_buffer_.buffer_, static_buffer_.size_));
                     if (free_len < fs) {
                         return EN_ATBUS_ERR_BUFF_LIMIT;
                     }
 
-                    void* buffer_start = fn::buffer_step(tail, free_len - fs);
+                    void* buffer_start = fn::buffer_next(tail, free_len - fs);
                     void* next_free = buffer_block::create(buffer_start, fs, s);
                     if (NULL == next_free) {
                         return EN_ATBUS_ERR_MALLOC;
                     }
-                    assert(next_free == fn::buffer_step(static_buffer_.buffer_, static_buffer_.size_));
+                    assert(next_free == fn::buffer_next(static_buffer_.buffer_, static_buffer_.size_));
                     sub_head(buffer_start);
                 }
 
@@ -454,7 +462,7 @@ namespace atbus {
                     return EN_ATBUS_ERR_BUFF_LIMIT;
                 }
 
-                void* buffer_start = fn::buffer_step(tail, free_len - fs);
+                void* buffer_start = fn::buffer_next(tail, free_len - fs);
                 // NNN tail  .... new_head NN head NNNNNN ....
                 void* next_free = buffer_block::create(buffer_start, fs, s);
                 if (NULL == next_free) {
