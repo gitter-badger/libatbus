@@ -93,7 +93,7 @@ namespace atbus {
             conf->send_buffer_max_size = 0;
             conf->send_buffer_limit_size = ATBUS_MACRO_MSG_LIMIT;
 
-            conf->recv_buffer_max_size = 0;
+            conf->recv_buffer_max_size = ATBUS_MACRO_MSG_LIMIT * conf->recv_buffer_static;
             conf->recv_buffer_limit_size = ATBUS_MACRO_MSG_LIMIT;
 
             conf->confirm_timeout = ATBUS_MACRO_CONNECTION_CONFIRM_TIMEOUT;
@@ -460,13 +460,13 @@ namespace atbus {
 
 
             ret->read_buffers.set_limit(channel->conf.recv_buffer_max_size, 0);
-            if (channel->conf.recv_buffer_static > 0) {
+            if (channel->conf.recv_buffer_max_size > 0 && channel->conf.recv_buffer_static > 0) {
                 ret->read_buffers.set_mode(channel->conf.recv_buffer_max_size, channel->conf.recv_buffer_static);
             }
             ret->read_head.len = 0;
 
             ret->write_buffers.set_limit(channel->conf.send_buffer_max_size, 0);
-            if (channel->conf.send_buffer_static > 0) {
+            if (channel->conf.send_buffer_max_size > 0 && channel->conf.send_buffer_static > 0) {
                 ret->write_buffers.set_mode(channel->conf.send_buffer_max_size, channel->conf.send_buffer_static);
             }
 

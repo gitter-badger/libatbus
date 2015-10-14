@@ -19,6 +19,26 @@ static const size_t MAX_TEST_BUFFER_LEN = 1024 * 32;
 static int g_check_flag = 0;
 static std::list<std::pair<size_t, size_t> > g_check_buff_sequence;
 
+static void disconnected_callback_test_fn(
+    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    int status,                         // libuv传入的转态码
+    void*,                              // 额外参数(不同事件不同含义)
+    size_t s                            // 额外参数长度
+    ) {
+    CASE_EXPECT_NE(NULL, channel);
+    CASE_EXPECT_NE(NULL, connection);
+    CASE_EXPECT_EQ(0, status);
+
+    if (0 != status) {
+        CASE_MSG_INFO() << uv_err_name(status) << ":" << uv_strerror(status) << std::endl;
+    } else {
+        CASE_MSG_INFO() << "disconnect done: " << connection->addr.address << std::endl;
+    }
+
+    ++g_check_flag;
+}
+
 static void accepted_callback_test_fn(
     const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
     const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
@@ -31,9 +51,9 @@ static void accepted_callback_test_fn(
     CASE_EXPECT_EQ(0, status);
 
     if (0 != status) {
-        CASE_ERROR() << uv_err_name(status) << ":" << uv_strerror(status) << std::endl;
+        CASE_MSG_INFO() << uv_err_name(status) << ":" << uv_strerror(status) << std::endl;
     } else {
-        CASE_INFO() << "accept connection: " << connection->addr.address<< std::endl;
+        CASE_MSG_INFO() << "accept connection: " << connection->addr.address<< std::endl;
     }
 
     ++g_check_flag;
@@ -68,9 +88,9 @@ static void connected_callback_test_fn(
     CASE_EXPECT_EQ(0, status);
 
     if (0 != status) {
-        CASE_ERROR() << uv_err_name(status) << ":"<< uv_strerror(status) << std::endl;
+        CASE_MSG_INFO() << uv_err_name(status) << ":"<< uv_strerror(status) << std::endl;
     } else {
-        CASE_INFO() << "connect to " << connection->addr.address<< " success" << std::endl;
+        CASE_MSG_INFO() << "connect to " << connection->addr.address<< " success" << std::endl;
     }
 
     ++g_check_flag;
@@ -89,7 +109,7 @@ static void setup_channel(atbus::channel::io_stream_channel& channel, const char
     }
 
     if (0 != res) {
-        CASE_ERROR() << uv_err_name(channel.error_code) << ":" << uv_strerror(channel.error_code) << std::endl;
+        CASE_MSG_INFO() << uv_err_name(channel.error_code) << ":" << uv_strerror(channel.error_code) << std::endl;
     }
 }
 
@@ -212,6 +232,83 @@ CASE_TEST(channel, io_stream_tcp_basic)
     CASE_EXPECT_EQ(0, cli.conn_pool.size());
 }
 
+
+// reset by peer(client)
+CASE_TEST(channel, io_stream_tcp_reset_by_client)
+{
+    atbus::channel::io_stream_channel svr, cli;
+    atbus::channel::io_stream_init(&svr, NULL, NULL);
+    atbus::channel::io_stream_init(&cli, NULL, NULL);
+
+    svr.evt.callbacks[atbus::channel::io_stream_callback_evt_t::EN_FN_DISCONNECTED] = disconnected_callback_test_fn;
+
+    int check_flag = g_check_flag = 0;
+
+    setup_channel(svr, "ipv6://:::16387", NULL);
+    CASE_EXPECT_EQ(1, g_check_flag);
+    CASE_EXPECT_NE(NULL, svr.ev_loop);
+
+    setup_channel(cli, NULL, "ipv4://127.0.0.1:16387");
+    setup_channel(cli, NULL, "dns://localhost:16387");
+    setup_channel(cli, NULL, "ipv6://::1:16387");
+
+    while (g_check_flag - check_flag < 7) {
+        atbus::channel::io_stream_run(&svr, atbus::adapter::RUN_NOWAIT);
+        atbus::channel::io_stream_run(&cli, atbus::adapter::RUN_NOWAIT);
+        CASE_THREAD_SLEEP_MS(64);
+    }
+
+    check_flag = g_check_flag;
+    atbus::channel::io_stream_close(&cli);
+    CASE_EXPECT_EQ(0, cli.conn_pool.size());
+
+    while (g_check_flag - check_flag < 3) {
+        atbus::channel::io_stream_run(&svr, atbus::adapter::RUN_NOWAIT);
+        CASE_THREAD_SLEEP_MS(64);
+    }
+    CASE_EXPECT_EQ(1, svr.conn_pool.size());
+
+    atbus::channel::io_stream_close(&svr);
+    CASE_EXPECT_EQ(0, svr.conn_pool.size());
+}
+
+// reset by peer(server)
+CASE_TEST(channel, io_stream_tcp_reset_by_server)
+{
+    atbus::channel::io_stream_channel svr, cli;
+    atbus::channel::io_stream_init(&svr, NULL, NULL);
+    atbus::channel::io_stream_init(&cli, NULL, NULL);
+
+    cli.evt.callbacks[atbus::channel::io_stream_callback_evt_t::EN_FN_DISCONNECTED] = disconnected_callback_test_fn;
+
+    int check_flag = g_check_flag = 0;
+
+    setup_channel(svr, "ipv6://:::16387", NULL);
+    CASE_EXPECT_EQ(1, g_check_flag);
+    CASE_EXPECT_NE(NULL, svr.ev_loop);
+
+    setup_channel(cli, NULL, "ipv4://127.0.0.1:16387");
+    setup_channel(cli, NULL, "dns://localhost:16387");
+    setup_channel(cli, NULL, "ipv6://::1:16387");
+
+    while (g_check_flag - check_flag < 7) {
+        atbus::channel::io_stream_run(&svr, atbus::adapter::RUN_NOWAIT);
+        atbus::channel::io_stream_run(&cli, atbus::adapter::RUN_NOWAIT);
+        CASE_THREAD_SLEEP_MS(64);
+    }
+
+    check_flag = g_check_flag;
+    atbus::channel::io_stream_close(&svr);
+    CASE_EXPECT_EQ(0, svr.conn_pool.size());
+
+    while (g_check_flag - check_flag < 3) {
+        atbus::channel::io_stream_run(&cli, atbus::adapter::RUN_NOWAIT);
+        CASE_THREAD_SLEEP_MS(64);
+    }
+    CASE_EXPECT_EQ(0, cli.conn_pool.size());
+
+    atbus::channel::io_stream_close(&cli);
+}
 
 // buffer recv size limit
 

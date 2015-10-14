@@ -79,7 +79,7 @@ CASE_TEST(channel, mem_siso)
 
             CASE_EXPECT_EQ(EN_ATBUS_ERR_BUFF_LIMIT, res);
 
-            std::cout<< "[ RUNNING  ] send "<< sum_len<< " bytes("<< times<< " times) in "<< ((et - bt) / (CLOCKS_PER_SEC / 1000))<< "ms"<< std::endl;
+            CASE_MSG_INFO() << "send "<< sum_len<< " bytes("<< times<< " times) in "<< ((et - bt) / (CLOCKS_PER_SEC / 1000))<< "ms"<< std::endl;
             send_sum_len = sum_len;
         }
 
@@ -104,7 +104,7 @@ CASE_TEST(channel, mem_siso)
             clock_t et = clock();
 
             CASE_EXPECT_EQ(EN_ATBUS_ERR_NO_DATA, res);
-            std::cout<< "[ RUNNING  ] recv "<< sum_len<< " bytes("<< times<< " times) in "<< ((et - bt) / (CLOCKS_PER_SEC / 1000))<< "ms"<< std::endl;
+            CASE_MSG_INFO() << "recv "<< sum_len<< " bytes("<< times<< " times) in "<< ((et - bt) / (CLOCKS_PER_SEC / 1000))<< "ms"<< std::endl;
             recv_sum_len = sum_len;
         }
 
@@ -237,7 +237,7 @@ CASE_TEST(channel, mem_miso)
                     if (data_seq[rdh] != rdd) {
                         std::pair<size_t, size_t> last_action = mem_last_action();
 
-                        std::cout<< "[ RUNNING  ] rdh="<< rdh<< ", data_seq[rdh]="<< data_seq[rdh]<< ", rdd="<< rdd<<
+                        CASE_MSG_INFO() << "rdh="<< rdh<< ", data_seq[rdh]="<< data_seq[rdh]<< ", rdd="<< rdd<<
                             ", start index="<< last_action.first<< ", end index="<< last_action.second<<
                             std::endl;
                     }
@@ -269,10 +269,10 @@ CASE_TEST(channel, mem_miso)
             ++ secs;
             std::chrono::milliseconds dura( 1000 );
             std::this_thread::sleep_for( dura );
-            std::cout<< "[ RUNNING 1] NO."<< secs<< " second(s)"<< std::endl<<
-                "[ RUNNING 2] recv("<< sum_recv_times<< " times, "<< sum_recv_len << " Bytes) err "<<
-                sum_recv_err<< " times"<< std::endl<<
-                "[ RUNNING 3] send("<< sum_send_times << " times, "<< sum_send_len << " Bytes) "<<
+            CASE_MSG_INFO() << "NO." << secs << " second(s)" << std::endl;
+            CASE_MSG_INFO() << "recv(" << sum_recv_times << " times, " << sum_recv_len << " Bytes) err " <<
+                sum_recv_err << " times" << std::endl;
+            CASE_MSG_INFO() << "send("<< sum_send_times << " times, "<< sum_send_len << " Bytes) "<<
                 "full "<< sum_send_full<< " times, err "<< sum_send_err<< " times"<< std::endl;
 
         } while (left_sec >= 0);

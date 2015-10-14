@@ -58,7 +58,7 @@ void test_case_func_name(test_name, case_name) ()
         } else { \
             ++(*test_manager::me().failed_counter_ptr);\
             shell_stream ss(std::cout); \
-            ss() << ShekkFontStyle::SHELL_FONT_COLOR_RED<< "FAILED => " << __FILE__<< ":" << __LINE__<< std::endl << \
+            ss() << ShellFontStyle::SHELL_FONT_COLOR_RED<< "FAILED => " << __FILE__<< ":" << __LINE__<< std::endl << \
             "Expected: "<< #expr<< std::endl; \
         }
 
@@ -75,8 +75,15 @@ void test_case_func_name(test_name, case_name) ()
 
 #endif
 
-#define CASE_INFO() std::cout<< "[ RUNNING  ] "
-#define CASE_ERROR() std::cerr<< "[ RUNNING  ] "
+// 前景色: BLACK,RED,GREEN,YELLOW,BLUE,MAGENTA,CYAN,WHITE
+#define CASE_MSG_FCOLOR(x) ShellFontStyle::SHELL_FONT_COLOR_##x
+// 背景色: BLACK,RED,GREEN,YELLOW,BLUE,MAGENTA,CYAN,WHITE
+#define CASE_MSG_BCOLOR(x) ShellFontStyle::SHELL_FONT_BACKGROUND_COLOR_##x
+// 字体格式: BOLD,UNDERLINE,FLASH,DARK
+#define CASE_MSG_STYLE(x) ShellFontStyle::SHELL_FONT_SPEC_##x
+
+#define CASE_MSG_INFO() shell_stream(std::cout)()<< "[ RUNNING  ] "
+#define CASE_MSG_ERROR() shell_stream(std::cerr)()<< "[ RUNNING  ] "
 
 // 测试中休眠
 #if (defined(__cplusplus) && __cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER >= 1800)
