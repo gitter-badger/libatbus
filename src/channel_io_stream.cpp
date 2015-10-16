@@ -58,25 +58,47 @@ namespace atbus {
         };
 
         static inline void io_stream_channel_callback(
-            io_stream_callback_evt_t::mem_fn_t fn, io_stream_channel* channel, io_stream_connection* conn_evt,
-            io_stream_connection* connection, int status,
-            void* priv_data, size_t s
-            ) {
-            if (NULL != channel && NULL != channel->evt.callbacks[fn]) {
-                channel->evt.callbacks[fn](channel, connection, status, priv_data, s);
+                io_stream_callback_evt_t::mem_fn_t fn, io_stream_channel* channel, io_stream_callback_t async_callback,
+                io_stream_connection* connection, int status, int errcode,
+                void* priv_data, size_t s
+                ) {
+            if (NULL != channel) {
+                channel->error_code = status;
             }
 
-            if (NULL != conn_evt && NULL != conn_evt->evt.callbacks[fn]) {
-                conn_evt->evt.callbacks[fn](channel, connection, status, priv_data, s);
+            if (NULL != channel && NULL != channel->evt.callbacks[fn]) {
+                channel->evt.callbacks[fn](channel, connection, errcode, priv_data, s);
+            }
+
+            if (NULL != async_callback) {
+                async_callback(channel, connection, errcode, priv_data, s);
             }
         }
 
         static inline void io_stream_channel_callback(
+            io_stream_callback_evt_t::mem_fn_t fn, io_stream_channel* channel, io_stream_connection* conn_evt,
+            io_stream_connection* connection, int status, int errcode,
+            void* priv_data, size_t s
+            ) {
+            io_stream_callback_t async_callback = (NULL != conn_evt && NULL != conn_evt->evt.callbacks[fn]) ? conn_evt->evt.callbacks[fn] : NULL;
+            io_stream_channel_callback(
+                fn, 
+                channel,
+                async_callback,
+                connection,
+                status,
+                errcode,
+                priv_data,
+                s
+            );
+        }
+
+        static inline void io_stream_channel_callback(
             io_stream_callback_evt_t::mem_fn_t fn, io_stream_channel* channel,
-            io_stream_connection* connection, int status,
+            io_stream_connection* connection, int status, int errcode,
             void* priv_data, size_t s
         ) {
-            io_stream_channel_callback(fn, channel, connection, connection, status, priv_data, s);
+            io_stream_channel_callback(fn, channel, connection, connection, status, errcode, priv_data, s);
         }
 
         void io_stream_init_configure(io_stream_conf* conf) {
@@ -157,12 +179,25 @@ namespace atbus {
                 }
             }
 
+            // 必须保证这个接口过后channel内的数据可以正常释放
+            // 所以必须等待相关的回调全部完成
+            // 当然也可以用另一种方法强行结束掉所有req，但是这样会造成丢失回调
+            // 并且这会要求逻辑层设计相当完善，否则可能导致内存泄漏。所以为了简化逻辑层设计，还是block并销毁所有数据
+
             if (true == channel->is_loop_owner && NULL != channel->ev_loop) {
+                // 先清理掉所有可以完成的事件
+                while (uv_run(channel->ev_loop, UV_RUN_NOWAIT)) {
+                    uv_run(channel->ev_loop, UV_RUN_ONCE);
+                }
+
                 uv_loop_close(channel->ev_loop);
                 // 停止时阻塞操作，保证资源正常释放
                 uv_run(channel->ev_loop, UV_RUN_DEFAULT);
-                uv_stop(channel->ev_loop);
                 free(channel->ev_loop);
+            } else {
+                while(!channel->conn_pool.empty()) {
+                    uv_run(channel->ev_loop, UV_RUN_ONCE);
+                }
             }
 
             channel->ev_loop = NULL;
@@ -198,6 +233,10 @@ namespace atbus {
                 buf->len = sizeof(conn_raw_ptr->read_head.buffer) - conn_raw_ptr->read_head.len;
 
                 if (0 == buf->len) {
+                    // 理论上这里不会走到，因为如果必然会先收取一次header的大小，这时候已经可以解出msg的大小
+                    // 如果msg超过限制大小并低于缓冲区大小，则会发出大小错误回调并会减少header的占用量，
+                    // 那么下一次这个回调函数调用时buf->len必然大于0
+                    // 如果msg超过缓冲区大小，则会出错回调并立即断开连接,不会再有下一次调用
                     buf->base = NULL;
                 } else {
                     buf->base = &conn_raw_ptr->read_head.buffer[conn_raw_ptr->read_head.len];
@@ -216,8 +255,8 @@ namespace atbus {
             io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
 
-            // 读取完或EAGAIN，直接忽略即可
-            if (0 == nread) {
+            // 读取完或EAGAIN或signal中断，直接忽略即可
+            if (0 == nread || UV_EAGAIN == nread || UV_EAI_AGAIN == nread || UV_EINTR == nread) {
                 return;
             }
 
@@ -228,15 +267,16 @@ namespace atbus {
                     io_stream_callback_evt_t::EN_FN_RECVED,
                     channel,
                     conn_raw_ptr,
-                    UV_EOF == nread? EN_ATBUS_ERR_EOF: EN_ATBUS_ERR_READ_FAILED,
+                    static_cast<int>(nread),
+                    EN_ATBUS_ERR_READ_FAILED,
                     NULL,
                     0
                 );
 
-                // EOF则关闭
-                if (UV_EOF == nread) {
-                    io_stream_disconnect(channel, conn_raw_ptr, NULL);
-                }
+                // 任何非重试的错误则关闭
+                // 注意libuv有个特殊的错误码 UV_ENOBUFS 表示缓冲区不足
+                // 理论上除非配置错误，否则不应该会出现，并且可能会导致header数据无法缩减。所以也直接关闭连接
+                io_stream_disconnect(channel, conn_raw_ptr, NULL);
                 return;
             }
 
@@ -271,12 +311,19 @@ namespace atbus {
                         uint32_t check_crc = atbus::detail::crc32(0, reinterpret_cast<unsigned char*>(buff_start) + sizeof(uint32_t) + vint_len, msg_len);
                         uint32_t expect_crc;
                         memcpy(&expect_crc, buff_start, sizeof(uint32_t));
+                        int errcode = EN_ATBUS_ERR_SUCCESS;
+                        if (check_crc != expect_crc) {
+                            errcode = EN_ATBUS_ERR_BAD_DATA;
+                        } else if (channel->conf.recv_buffer_limit_size > 0 && msg_len > channel->conf.recv_buffer_limit_size) {
+                            errcode = EN_ATBUS_ERR_INVALID_SIZE;
+                        }
 
                         io_stream_channel_callback(
                             io_stream_callback_evt_t::EN_FN_RECVED,
                             channel,
                             conn_raw_ptr,
-                            check_crc == expect_crc? EN_ATBUS_ERR_SUCCESS: EN_ATBUS_ERR_BAD_DATA,
+                            0,
+                            errcode,
                             buff_start + sizeof(uint32_t) + vint_len,
                             msg_len
                         );
@@ -328,14 +375,23 @@ namespace atbus {
                 uint32_t check_crc = atbus::detail::crc32(0, reinterpret_cast<unsigned char*>(data) + sizeof(uint32_t), sread - sizeof(uint32_t));
                 uint32_t expect_crc;
                 memcpy(&expect_crc, data, sizeof(uint32_t));
+                size_t msg_len = sread - sizeof(uint32_t); // - crc32 header
+
+                int errcode = EN_ATBUS_ERR_SUCCESS;
+                if (check_crc != expect_crc) {
+                    errcode = EN_ATBUS_ERR_BAD_DATA;
+                } else if (channel->conf.recv_buffer_limit_size > 0 && msg_len > channel->conf.recv_buffer_limit_size) {
+                    errcode = EN_ATBUS_ERR_INVALID_SIZE;
+                }
 
                 io_stream_channel_callback(
                     io_stream_callback_evt_t::EN_FN_RECVED,
                     channel,
                     conn_raw_ptr,
-                    check_crc == expect_crc? EN_ATBUS_ERR_SUCCESS: EN_ATBUS_ERR_BAD_DATA,
+                    0,
+                    errcode,
                     reinterpret_cast<char*>(data) + sizeof(uint32_t),   // + crc32 header
-                    sread - sizeof(uint32_t)                            // - crc32 header
+                    msg_len
                 );
 
                 // 回调并释放缓冲区
@@ -348,6 +404,7 @@ namespace atbus {
                         io_stream_callback_evt_t::EN_FN_RECVED,
                         channel,
                         conn_raw_ptr,
+                        0,
                         EN_ATBUS_ERR_INVALID_SIZE,
                         conn_raw_ptr->read_head.buffer,
                         conn_raw_ptr->read_head.len
@@ -430,7 +487,7 @@ namespace atbus {
 
             if (iter != channel->conn_pool.end()) {
                 iter->second->status = io_stream_connection::EN_ST_DISCONNECTIED;
-                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_DISCONNECTED, channel, iter->second.get(), 0, NULL, 0);
+                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_DISCONNECTED, channel, iter->second.get(), 0, EN_ATBUS_ERR_SUCCESS, NULL, 0);
                 channel->conn_pool.erase(iter);
             }
         }
@@ -487,9 +544,11 @@ namespace atbus {
         static void io_stream_delete_stream_fn(adapter::stream_t* handle) {
             T* real_conn = reinterpret_cast<T*>(handle);
 
-            if( NULL != handle->data && 0 == uv_is_closing(reinterpret_cast<adapter::handle_t*>(handle))) {
-                uv_close(reinterpret_cast<adapter::handle_t*>(handle), io_stream_connection_on_close);
-            }
+            // 到这里必须已经释放handle了，否则删除hanlde会导致数据异常。
+            assert(uv_is_closing(reinterpret_cast<adapter::handle_t*>(handle)));
+//            if(0 == uv_is_closing(reinterpret_cast<adapter::handle_t*>(handle))) {
+//                uv_close(reinterpret_cast<adapter::handle_t*>(handle), io_stream_connection_on_close);
+//            }
 
             delete real_conn;
         }
@@ -573,7 +632,7 @@ namespace atbus {
             } while (false);
 
             // 回调函数，如果发起连接接口调用成功一定要调用回调函数
-            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), status, NULL, 0);
+            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), status, EN_ATBUS_ERR_SUCCESS, NULL, 0);
         }
 
         // pipe 收到连接
@@ -623,7 +682,7 @@ namespace atbus {
             } while (false);
 
             // 回调函数，如果发起连接接口调用成功一定要调用回调函数
-            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), status, NULL, 0);
+            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), status, EN_ATBUS_ERR_SUCCESS, NULL, 0);
         }
 
         // listen 接口传入域名时的回调异步数据
@@ -631,6 +690,7 @@ namespace atbus {
             io_stream_channel* channel;
             channel_address_t addr;
             io_stream_callback_t callback;
+            uv_getaddrinfo_t req;
         };
 
         // listen 接口传入域名时的回调
@@ -639,6 +699,7 @@ namespace atbus {
             int listen_res = status;
             do {
                 async_data = reinterpret_cast<io_stream_dns_async_data*>(req->data);
+                async_data->channel->error_code = status;
                 assert(async_data);
 
                 if (0 != status) {
@@ -673,12 +734,8 @@ namespace atbus {
             } while (false);
 
             // 接口调用不成功则要调用回调函数
-            if (0 != listen_res && NULL != async_data->callback) {
-                async_data->callback(async_data->channel, NULL, EN_ATBUS_ERR_DNS_GETADDR_FAILED, res, 0);
-            }
-
-            if (NULL != req) {
-                delete req;
+            if (0 != listen_res) {
+                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, async_data->channel, async_data->callback, NULL, listen_res, EN_ATBUS_ERR_DNS_GETADDR_FAILED, res, 0);
             }
 
             if (NULL != async_data) {
@@ -747,11 +804,11 @@ namespace atbus {
                         break;
                     }
                     conn->addr = addr;
-                    conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = callback;
+                    conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_ACCEPTED] = callback;
                     conn->status = io_stream_connection::EN_ST_CONNECTED;
 
                     io_stream_tcp_init(channel, conn.get(), handle);
-                    io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, channel, conn.get(), 0, NULL, 0);
+                    io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, channel, callback, conn.get(), 0, ret, NULL, 0);
                     return ret;
                 } while (false);
 
@@ -781,34 +838,28 @@ namespace atbus {
                     }
 
                     conn->addr = addr;
-                    conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = callback;
+                    conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_ACCEPTED] = callback;
                     conn->status = io_stream_connection::EN_ST_CONNECTED;
 
                     io_stream_pipe_init(channel, conn.get(), handle);
-                    io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, channel, conn.get(), 0, NULL, 0);
+                    io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, channel, callback, conn.get(), 0, ret, NULL, 0);
                     return ret;
                 } while (false);
 
                 uv_close(reinterpret_cast<uv_handle_t*>(handle), io_stream_connection_on_close);
                 return ret;
             } else if (0 == ATBUS_FUNC_STRNCASE_CMP("dns", addr.scheme.c_str(), 3)) {
-                uv_getaddrinfo_t* req = new uv_getaddrinfo_t();
-                if (NULL == req) {
-                    return EN_ATBUS_ERR_MALLOC;
-                }
-
                 io_stream_dns_async_data* async_data = new io_stream_dns_async_data();
                 if (NULL == async_data) {
-                    delete req;
                     return EN_ATBUS_ERR_MALLOC;
                 }
                 async_data->channel = channel;
                 async_data->addr = addr;
                 async_data->callback = callback;
+                async_data->req.data = async_data;
 
-                req->data = async_data;
-                if(0 != uv_getaddrinfo(ev_loop, req, io_stream_dns_connection_cb, addr.host.c_str(), NULL, NULL)) {
-                    delete req;
+                
+                if(0 != uv_getaddrinfo(ev_loop, &async_data->req, io_stream_dns_connection_cb, addr.host.c_str(), NULL, NULL)) {
                     delete async_data;
                     return EN_ATBUS_ERR_DNS_GETADDR_FAILED;
                 }
@@ -828,16 +879,40 @@ namespace atbus {
             bool pipe;
         };
 
+        static void io_stream_connect_on_failed_close(uv_handle_t* handle) {
+            // 注意只有这里 handle->data 的数据指向io_stream_connect_async_data
+            // 因为这时候没有建立io_stream_connection对象，其他情况下都是io_stream_connection
+            io_stream_connect_async_data* async_data = reinterpret_cast<io_stream_connect_async_data*>(handle->data);
+            // 连接尚未初始化完毕，直接退出
+            if (NULL == async_data) {
+                return;
+            }
+
+            delete async_data;
+        }
+
         static void io_stream_all_connected_cb(uv_connect_t* req, int status) {
             io_stream_connect_async_data* async_data = reinterpret_cast<io_stream_connect_async_data*>(req->data);
             assert(async_data);
             assert(async_data->channel);
 
+            int errcode = EN_ATBUS_ERR_SUCCESS;
+            async_data->channel->error_code = status;
             std::shared_ptr<io_stream_connection> conn;
             do {
+                if (0 != status) {
+                    if (async_data->pipe) {
+                        errcode = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
+                    } else {
+                        errcode = EN_ATBUS_ERR_SOCK_CONNECT_FAILED;
+                    }
+
+                    break;
+                }
+
                 conn = io_stream_make_connection(async_data->channel, async_data->stream);
                 if (!conn) {
-                    status = EN_ATBUS_ERR_MALLOC;
+                    errcode = EN_ATBUS_ERR_MALLOC;
                     break;
                 }
                 conn->addr = async_data->addr;
@@ -848,24 +923,22 @@ namespace atbus {
                     io_stream_tcp_init(async_data->channel, conn.get(), reinterpret_cast<adapter::tcp_t*>(req->handle));
                 }
 
-                conn->evt.callbacks[io_stream_callback_evt_t::EN_FN_CONNECTED] = async_data->callback;
                 conn->status = io_stream_connection::EN_ST_CONNECTED;
             } while(false);
 
-            if (0 == status) {
-                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, async_data->channel, conn.get(), status, NULL, 0);
+            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, async_data->channel, async_data->callback, conn.get(), status, errcode, NULL, 0);
+
+            // 如果连接成功，async_data->stream的生命周期由conn接管
+            // 如果失败，需要关闭handle并在回调之后删除async_data。所以这时候不能直接
+            // delete async_data;
+            // 需要等关闭回调之后移除
+            if(conn) {
+                delete async_data;
             } else {
-                if(conn) {
-                    conn->status = io_stream_connection::EN_ST_CREATED;
-                }
-
-                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, async_data->channel, conn.get(), status, NULL, 0);
-
-                // 释放连接
-                io_stream_disconnect(async_data->channel, conn.get(), NULL);
+                // 只有这里走特殊的流程
+                async_data->stream->data = async_data;
+                uv_close(reinterpret_cast<uv_handle_t*>(async_data->stream.get()), io_stream_connect_on_failed_close);
             }
-
-            delete async_data;
         }
 
         // listen 接口传入域名时的回调
@@ -874,6 +947,7 @@ namespace atbus {
             int listen_res = status;
             do {
                 async_data = reinterpret_cast<io_stream_dns_async_data*>(req->data);
+                async_data->channel->error_code = status;
                 assert(async_data);
 
                 if (0 != status) {
@@ -908,12 +982,8 @@ namespace atbus {
             } while (false);
 
             // 接口调用不成功则要调用回调函数
-            if (0 != listen_res && NULL != async_data->callback) {
-                async_data->callback(async_data->channel, NULL, EN_ATBUS_ERR_DNS_GETADDR_FAILED, res, 0);
-            }
-
-            if (NULL != req) {
-                delete req;
+            if (0 != listen_res) {
+                io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_CONNECTED, async_data->channel, async_data->callback, NULL, listen_res, EN_ATBUS_ERR_DNS_GETADDR_FAILED, res, 0);
             }
 
             if (NULL != async_data) {
@@ -1030,23 +1100,16 @@ namespace atbus {
                 return ret;
                 
             } else if (0 == ATBUS_FUNC_STRNCASE_CMP("dns", addr.scheme.c_str(), 3)) {
-                uv_getaddrinfo_t* req = new uv_getaddrinfo_t();
-                if (NULL == req) {
-                    return EN_ATBUS_ERR_MALLOC;
-                }
-
                 io_stream_dns_async_data* async_data = new io_stream_dns_async_data();
                 if (NULL == async_data) {
-                    delete req;
                     return EN_ATBUS_ERR_MALLOC;
                 }
                 async_data->channel = channel;
                 async_data->addr = addr;
                 async_data->callback = callback;
+                async_data->req.data = async_data;
 
-                req->data = async_data;
-                if (0 != uv_getaddrinfo(ev_loop, req, io_stream_dns_connect_cb, addr.host.c_str(), NULL, NULL)) {
-                    delete req;
+                if (0 != uv_getaddrinfo(ev_loop, &async_data->req, io_stream_dns_connect_cb, addr.host.c_str(), NULL, NULL)) {
                     delete async_data;
                     return EN_ATBUS_ERR_DNS_GETADDR_FAILED;
                 }
@@ -1064,7 +1127,9 @@ namespace atbus {
 
             connection->evt.callbacks[io_stream_callback_evt_t::EN_FN_DISCONNECTED] = callback;
 
-            uv_close(reinterpret_cast<uv_handle_t*>(connection->handle.get()), io_stream_connection_on_close);
+            if (0 == uv_is_closing(reinterpret_cast<uv_handle_t*>(connection->handle.get()))) {
+                uv_close(reinterpret_cast<uv_handle_t*>(connection->handle.get()), io_stream_connection_on_close);
+            }
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -1109,6 +1174,7 @@ namespace atbus {
                     io_stream_callback_evt_t::EN_FN_WRITEN,
                     connection->channel,
                     connection,
+                    status,
                     req == data? EN_ATBUS_ERR_SUCCESS: EN_ATBUS_ERR_NODE_TIMEOUT,
                     buff_start + vint_len,
                     out
@@ -1128,6 +1194,10 @@ namespace atbus {
         int io_stream_send(io_stream_connection* connection, const void* buf, size_t len) {
             if (NULL == connection) {
                 return EN_ATBUS_ERR_PARAMS;
+            }
+
+            if (connection->channel->conf.send_buffer_limit_size > 0 && len > connection->channel->conf.send_buffer_limit_size) {
+                return EN_ATBUS_ERR_INVALID_SIZE;
             }
 
             char vint[16];

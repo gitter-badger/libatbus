@@ -51,7 +51,8 @@ namespace atbus {
         extern void io_stream_init_configure(io_stream_conf* conf);
 
         extern int io_stream_init(io_stream_channel* channel, adapter::loop_t* ev_loop, const io_stream_conf* conf);
-        // may block and wait for all actions done when channel is the creator of event loop
+
+        // it will block and wait for all connections are disconnected success.
         extern int io_stream_close(io_stream_channel* channel);
 
         extern int io_stream_run(io_stream_channel* channel, adapter::run_mode_t mode = adapter::RUN_NOWAIT);

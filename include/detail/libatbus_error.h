@@ -8,13 +8,12 @@ typedef enum {
 
     EN_ATBUS_ERR_PARAMS                     = -1,
     EN_ATBUS_ERR_INNER                      = -2,
-    EN_ATBUS_ERR_NO_DATA                    = -3, // 无数据
-    EN_ATBUS_ERR_BUFF_LIMIT                 = -4, // 缓冲区不足
-    EN_ATBUS_ERR_MALLOC                     = -5, // 分配失败
-    EN_ATBUS_ERR_SCHEME                     = -6, // 协议错误
-    EN_ATBUS_ERR_EOF                        = -7, // 数据流终止
-    EN_ATBUS_ERR_BAD_DATA                   = -8, // 数据校验不通过
-    EN_ATBUS_ERR_INVALID_SIZE               = -9, // 数据大小异常(将会导致连接断开)
+    EN_ATBUS_ERR_NO_DATA                    = -3,   // 无数据
+    EN_ATBUS_ERR_BUFF_LIMIT                 = -4,   // 缓冲区不足
+    EN_ATBUS_ERR_MALLOC                     = -5,   // 分配失败
+    EN_ATBUS_ERR_SCHEME                     = -6,   // 协议错误
+    EN_ATBUS_ERR_BAD_DATA                   = -7,   // 数据校验不通过
+    EN_ATBUS_ERR_INVALID_SIZE               = -8,   // 数据大小异常
 
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
 
