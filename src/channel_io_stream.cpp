@@ -562,6 +562,27 @@ namespace atbus {
             return real_conn;
         }
 
+        struct io_stream_connect_async_data {
+            uv_connect_t req;
+            channel_address_t addr;
+            io_stream_channel* channel;
+            io_stream_callback_t callback;
+            std::shared_ptr<adapter::stream_t> stream;
+            bool pipe;
+        };
+
+        static void io_stream_connect_on_failed_close(uv_handle_t* handle) {
+            // 注意只有这里 handle->data 的数据指向io_stream_connect_async_data
+            // 因为这时候没有建立io_stream_connection对象，其他情况下都是io_stream_connection
+            io_stream_connect_async_data* async_data = reinterpret_cast<io_stream_connect_async_data*>(handle->data);
+            // 连接尚未初始化完毕，直接退出
+            if (NULL == async_data) {
+                return;
+            }
+
+            delete async_data;
+        }
+
         // tcp 收到连接通用逻辑
         static adapter::tcp_t* io_stream_tcp_connection_common(std::shared_ptr<io_stream_connection>& conn, uv_stream_t* req, int status) {
             io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(req->data);
@@ -573,16 +594,18 @@ namespace atbus {
                 return NULL;
             }
 
+            adapter::tcp_t accpted_fd;
+            uv_tcp_init(req->loop, &accpted_fd);
+            if (0 != (channel->error_code = uv_accept(req, reinterpret_cast<adapter::stream_t*>(&accpted_fd)))) {
+                return NULL;
+            }
+
             std::shared_ptr<adapter::stream_t> recv_conn;
             adapter::tcp_t* tcp_conn = io_stream_make_stream_ptr<adapter::tcp_t>(recv_conn);
             if (NULL == tcp_conn) {
                 return NULL;
             }
-
-            uv_tcp_init(req->loop, tcp_conn);
-            if (0 != uv_accept(req, recv_conn.get())) {
-                return NULL;
-            }
+            *tcp_conn = accpted_fd;
 
             conn = io_stream_make_connection(
                 channel,
@@ -590,7 +613,12 @@ namespace atbus {
             );
 
             if (!conn) {
-                uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), io_stream_connection_on_close);
+                // 拿一个东西来保存handle,否则会在close回调前释放handle
+                io_stream_connect_async_data* async_data = new io_stream_connect_async_data();
+                async_data->stream = recv_conn;
+                recv_conn->data = async_data;
+
+                uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), io_stream_connect_on_failed_close);
                 return NULL;
             }
 
@@ -605,6 +633,8 @@ namespace atbus {
             assert(conn_raw_ptr);
             io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
+            channel->error_code = status;
+            int res = EN_ATBUS_ERR_SUCCESS;
 
             std::shared_ptr<adapter::stream_t> recv_conn;
             std::shared_ptr<io_stream_connection> conn;
@@ -612,6 +642,7 @@ namespace atbus {
             do {
                 adapter::tcp_t* tcp_conn = io_stream_tcp_connection_common(conn, req, status);
                 if (NULL == tcp_conn || !conn) {
+                    res = EN_ATBUS_ERR_SOCK_CONNECT_FAILED;
                     break;
                 }
 
@@ -632,7 +663,7 @@ namespace atbus {
             } while (false);
 
             // 回调函数，如果发起连接接口调用成功一定要调用回调函数
-            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), status, EN_ATBUS_ERR_SUCCESS, NULL, 0);
+            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), channel->error_code, res, NULL, 0);
         }
 
         // pipe 收到连接
@@ -641,23 +672,30 @@ namespace atbus {
             assert(conn_raw_ptr);
             io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
+            channel->error_code = status;
+            int res = EN_ATBUS_ERR_SUCCESS;
 
             std::shared_ptr<io_stream_connection> conn;
             do {
                 if (0 != status || NULL == channel) {
+                    res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
+                    break;
+                }
+
+                adapter::pipe_t accepted_fd;
+                uv_pipe_init(req->loop, &accepted_fd, 1);
+                if (0 != (channel->error_code = uv_accept(req, reinterpret_cast<adapter::stream_t*>(&accepted_fd)))) {
+                    res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
                     break;
                 }
 
                 std::shared_ptr<adapter::stream_t> recv_conn;
                 adapter::pipe_t* pipe_conn = io_stream_make_stream_ptr<adapter::pipe_t>(recv_conn);
                 if (NULL == pipe_conn) {
+                    res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
                     break;
                 }
-
-                uv_pipe_init(req->loop, pipe_conn, 1);
-                if (0 != uv_accept(req, recv_conn.get())) {
-                    break;
-                }
+                *pipe_conn = accepted_fd;
 
                 conn = io_stream_make_connection(
                     channel,
@@ -665,7 +703,13 @@ namespace atbus {
                 );
 
                 if (!conn) {
-                    uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), io_stream_connection_on_close);
+                    // 拿一个东西来保存handle,否则会在close回调前释放handle
+                    io_stream_connect_async_data* async_data = new io_stream_connect_async_data();
+                    async_data->stream = recv_conn;
+                    recv_conn->data = async_data;
+
+                    uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), io_stream_connect_on_failed_close);
+                    res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
                     break;
                 }
 
@@ -682,7 +726,7 @@ namespace atbus {
             } while (false);
 
             // 回调函数，如果发起连接接口调用成功一定要调用回调函数
-            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), status, EN_ATBUS_ERR_SUCCESS, NULL, 0);
+            io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), channel->error_code, res, NULL, 0);
         }
 
         // listen 接口传入域名时的回调异步数据
@@ -820,13 +864,13 @@ namespace atbus {
                 uv_pipe_init(ev_loop, handle, 1);
                 int ret = EN_ATBUS_ERR_SUCCESS;
                 do {
-                    if (0 != uv_pipe_bind(handle, addr.host.c_str())) {
+                    if (0 != (channel->error_code = uv_pipe_bind(handle, addr.host.c_str()))) {
                         ret = EN_ATBUS_ERR_PIPE_BIND_FAILED;
                         break;
                     }
 
                     io_stream_pipe_setup(channel, handle);
-                    if (0 != uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_pipe_connection_cb)) {
+                    if (0 != (channel->error_code = uv_listen(reinterpret_cast<adapter::stream_t*>(handle), channel->conf.backlog, io_stream_pipe_connection_cb))) {
                         ret = EN_ATBUS_ERR_PIPE_LISTEN_FAILED;
                         break;
                     }
@@ -868,27 +912,6 @@ namespace atbus {
             }
 
             return EN_ATBUS_ERR_SCHEME;
-        }
-
-        struct io_stream_connect_async_data {
-            uv_connect_t req;
-            channel_address_t addr;
-            io_stream_channel* channel;
-            io_stream_callback_t callback;
-            std::shared_ptr<adapter::stream_t> stream;
-            bool pipe;
-        };
-
-        static void io_stream_connect_on_failed_close(uv_handle_t* handle) {
-            // 注意只有这里 handle->data 的数据指向io_stream_connect_async_data
-            // 因为这时候没有建立io_stream_connection对象，其他情况下都是io_stream_connection
-            io_stream_connect_async_data* async_data = reinterpret_cast<io_stream_connect_async_data*>(handle->data);
-            // 连接尚未初始化完毕，直接退出
-            if (NULL == async_data) {
-                return;
-            }
-
-            delete async_data;
         }
 
         static void io_stream_all_connected_cb(uv_connect_t* req, int status) {

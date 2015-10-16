@@ -201,6 +201,9 @@ CASE_TEST(channel, io_stream_tcp_basic)
         uv_run(&loop, UV_RUN_ONCE);
     }
 
+    if (cli.conn_pool.empty()) {
+        return;
+    }
 
     svr.evt.callbacks[atbus::channel::io_stream_callback_evt_t::EN_FN_RECVED] = recv_callback_check_fn;
     cli.evt.callbacks[atbus::channel::io_stream_callback_evt_t::EN_FN_RECVED] = recv_callback_check_fn;
@@ -284,6 +287,11 @@ CASE_TEST(channel, io_stream_tcp_reset_by_client)
         atbus::channel::io_stream_run(&cli, atbus::adapter::RUN_NOWAIT);
         CASE_THREAD_SLEEP_MS(64);
     }
+    CASE_EXPECT_NE(0, cli.conn_pool.size());
+
+    if (cli.conn_pool.empty()) {
+        return;
+    }
 
     check_flag = g_check_flag;
     atbus::channel::io_stream_close(&cli);
@@ -322,6 +330,11 @@ CASE_TEST(channel, io_stream_tcp_reset_by_server)
         atbus::channel::io_stream_run(&svr, atbus::adapter::RUN_NOWAIT);
         atbus::channel::io_stream_run(&cli, atbus::adapter::RUN_NOWAIT);
         CASE_THREAD_SLEEP_MS(64);
+    }
+    CASE_EXPECT_NE(0, cli.conn_pool.size());
+
+    if (cli.conn_pool.empty()) {
+        return;
     }
 
     check_flag = g_check_flag;
@@ -391,6 +404,11 @@ CASE_TEST(channel, io_stream_tcp_size_extended)
         atbus::channel::io_stream_run(&svr, atbus::adapter::RUN_NOWAIT);
         atbus::channel::io_stream_run(&cli, atbus::adapter::RUN_NOWAIT);
         CASE_THREAD_SLEEP_MS(64);
+    }
+    CASE_EXPECT_NE(0, cli.conn_pool.size());
+
+    if (cli.conn_pool.empty()) {
+        return;
     }
 
     check_flag = g_check_flag;
