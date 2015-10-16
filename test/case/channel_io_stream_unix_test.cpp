@@ -15,16 +15,17 @@
 #include "detail/libatbus_channel_export.h"
 #include "frame/test_macros.h"
 
-#if 0
 static const size_t MAX_TEST_BUFFER_LEN = 1024 * 256;
 static int g_check_flag = 0;
 static std::pair<size_t, size_t> g_recv_rec = std::make_pair(0, 0);
 static std::list<std::pair<size_t, size_t> > g_check_buff_sequence;
 
-#ifdef _MSC_VER
+#ifdef WIN32
     #define UNIT_TEST_LISTEN_ADDR "unix://\\\\.\\pipe\\unit_test.sock"
+    #define UNIT_TEST_INVALID_ADDR "unix://\\\\.\\pipe\\unit_test.invalid.sock"
 #else
     #define UNIT_TEST_LISTEN_ADDR "unix://unit_test.sock"
+    #define UNIT_TEST_INVALID_ADDR "unix://unit_test.invalid.sock"
 #endif
 
 static void disconnected_callback_test_fn(
@@ -446,7 +447,11 @@ static void connect_failed_callback_test_fn(
     CASE_EXPECT_EQ(NULL, connection);
 
     CASE_EXPECT_TRUE(EN_ATBUS_ERR_PIPE_CONNECT_FAILED == status);
-    CASE_EXPECT_EQ(UV_ECONNREFUSED, channel->error_code);
+    CASE_EXPECT_EQ(ENOENT, channel->error_code);
+
+    if (0 != channel->error_code) {
+        CASE_MSG_INFO() << uv_err_name(channel->error_code) << ":" << uv_strerror(channel->error_code) << std::endl;
+    }
     
     ++g_check_flag;
 }
@@ -462,7 +467,7 @@ CASE_TEST(channel, io_stream_unix_connect_failed)
     atbus::channel::channel_address_t addr;
 
     // assume port 16388 is unreachable
-    atbus::channel::make_address("unix://unit_test.invalid.sock", addr);
+    atbus::channel::make_address(UNIT_TEST_INVALID_ADDR, addr);
     int res = atbus::channel::io_stream_connect(&cli, addr, connect_failed_callback_test_fn);
     CASE_EXPECT_EQ(0, res);
 
@@ -473,4 +478,3 @@ CASE_TEST(channel, io_stream_unix_connect_failed)
     atbus::channel::io_stream_close(&cli);
 }
 
-#endif

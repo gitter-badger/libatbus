@@ -445,7 +445,11 @@ static void connect_failed_callback_test_fn(
     } else {
         CASE_EXPECT_EQ(UV_EAI_NONAME, channel->error_code);
     }
-    
+
+    if (0 != channel->error_code) {
+        CASE_MSG_INFO() << uv_err_name(channel->error_code) << ":" << uv_strerror(channel->error_code) << std::endl;
+    }
+         
     ++g_check_flag;
 }
 
