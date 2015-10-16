@@ -447,7 +447,7 @@ static void connect_failed_callback_test_fn(
     CASE_EXPECT_EQ(NULL, connection);
 
     CASE_EXPECT_TRUE(EN_ATBUS_ERR_PIPE_CONNECT_FAILED == status);
-    CASE_EXPECT_EQ(ENOENT, channel->error_code);
+    CASE_EXPECT_EQ(-ENOENT, channel->error_code);
 
     if (0 != channel->error_code) {
         CASE_MSG_INFO() << uv_err_name(channel->error_code) << ":" << uv_strerror(channel->error_code) << std::endl;
