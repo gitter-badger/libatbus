@@ -15,6 +15,7 @@
 #include "detail/libatbus_channel_export.h"
 #include "frame/test_macros.h"
 
+#if 0
 static const size_t MAX_TEST_BUFFER_LEN = 1024 * 256;
 static int g_check_flag = 0;
 static std::pair<size_t, size_t> g_recv_rec = std::make_pair(0, 0);
@@ -471,3 +472,5 @@ CASE_TEST(channel, io_stream_unix_connect_failed)
 
     atbus::channel::io_stream_close(&cli);
 }
+
+#endif

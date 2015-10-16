@@ -594,18 +594,16 @@ namespace atbus {
                 return NULL;
             }
 
-            adapter::tcp_t accpted_fd;
-            uv_tcp_init(req->loop, &accpted_fd);
-            if (0 != (channel->error_code = uv_accept(req, reinterpret_cast<adapter::stream_t*>(&accpted_fd)))) {
-                return NULL;
-            }
-
             std::shared_ptr<adapter::stream_t> recv_conn;
             adapter::tcp_t* tcp_conn = io_stream_make_stream_ptr<adapter::tcp_t>(recv_conn);
             if (NULL == tcp_conn) {
                 return NULL;
             }
-            *tcp_conn = accpted_fd;
+
+            uv_tcp_init(req->loop, tcp_conn);
+            if (0 != (channel->error_code = uv_accept(req, recv_conn.get()))) {
+                return NULL;
+            }
 
             conn = io_stream_make_connection(
                 channel,
@@ -682,20 +680,18 @@ namespace atbus {
                     break;
                 }
 
-                adapter::pipe_t accepted_fd;
-                uv_pipe_init(req->loop, &accepted_fd, 1);
-                if (0 != (channel->error_code = uv_accept(req, reinterpret_cast<adapter::stream_t*>(&accepted_fd)))) {
-                    res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
-                    break;
-                }
-
                 std::shared_ptr<adapter::stream_t> recv_conn;
                 adapter::pipe_t* pipe_conn = io_stream_make_stream_ptr<adapter::pipe_t>(recv_conn);
                 if (NULL == pipe_conn) {
                     res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
                     break;
                 }
-                *pipe_conn = accepted_fd;
+
+                uv_pipe_init(req->loop, pipe_conn, 1);
+                if (0 != (channel->error_code = uv_accept(req, recv_conn.get()))) {
+                    res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
+                    break;
+                }
 
                 conn = io_stream_make_connection(
                     channel,
