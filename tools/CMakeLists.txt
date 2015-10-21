@@ -29,6 +29,7 @@ foreach(TOOLS_SRC_FILE IN LISTS TOOLS_SRC_LIST)
     target_link_libraries("${TOOLS_SRC_BIN_NAME}" 
 	    ${PROJECT_LIB_LINK}
 		${PROJECT_TOOLS_LIB_LINK}
+        ${3RD_PARTY_LIBUV_LINK_NAME}
 	)
 	
 	install(TARGETS "${TOOLS_SRC_BIN_NAME}"

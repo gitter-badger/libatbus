@@ -510,6 +510,7 @@ namespace atbus {
             }
 
             ret->handle = handle;
+            ret->data = NULL;
             handle->data = ret.get();
 
             memset(ret->evt.callbacks, 0, sizeof(ret->evt.callbacks));

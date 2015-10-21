@@ -118,6 +118,9 @@ namespace atbus {
             } read_head_t;
             read_head_t read_head;
             detail::buffer_manager write_buffers;           // 写数据缓冲区(两种Buffer管理方式，一种动态，一种静态)
+
+            // 自定义数据区域
+            void* data;
         };
 
         struct io_stream_conf {
