@@ -23,7 +23,7 @@ fi
 
 ./benchmark_io_stream_channel_recv "$ADDRESS" $UNIT_SIZE > recv.log 2>&1 &
 
-#sleep 2;
+sleep 2;
 
-#./benchmark_io_stream_channel_send "$ADDRESS" $UNIT_SIZE $LIMIT_SIZE $STATIC_LIMIT_NUM > send.log 2>&1 &
+./benchmark_io_stream_channel_send "$ADDRESS" $UNIT_SIZE $LIMIT_SIZE $STATIC_LIMIT_NUM > send.log 2>&1 &
 
