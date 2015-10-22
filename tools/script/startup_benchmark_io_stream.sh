@@ -1,0 +1,29 @@
+﻿#!/bin/sh
+
+ADDRESS="ipv6://::1:16389";
+UNIT_SIZE=1024 ;
+LIMIT_SIZE=4194304 ;
+STATIC_LIMIT_NUM=1024 ;
+
+if [ $# -gt 1 ]; then
+    ADDRESS="$1";
+fi
+
+if [ $# -gt 2 ]; then
+    UNIT_SIZE=$2 ;
+fi
+
+if [ $# -gt 3 ]; then
+    LIMIT_SIZE=$3 ;
+fi
+
+if [ $# -gt 4 ]; then
+    STATIC_LIMIT_NUM=$4 ;
+fi
+
+./benchmark_io_stream_channel_recv "$ADDRESS" $UNIT_SIZE > recv.log 2>&1 &
+
+#sleep 2;
+
+#./benchmark_io_stream_channel_send "$ADDRESS" $UNIT_SIZE $LIMIT_SIZE $STATIC_LIMIT_NUM > send.log 2>&1 &
+

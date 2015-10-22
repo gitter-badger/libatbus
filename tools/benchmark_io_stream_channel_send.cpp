@@ -17,7 +17,7 @@ struct run_config {
     size_t* buff_pool;
 
     // stats
-
+    size_t pending_send;
     size_t sum_send_len;
     size_t sum_send_times;
     size_t sum_send_full;
@@ -56,6 +56,8 @@ static void sended_callback(
     ) {
     assert(channel);
     assert(connection);
+
+    --conf.pending_send;
 
     if (0 != status) {
         fprintf(stderr, "io_stream_send callback error, ret code: %d. %s: %s\n",
@@ -102,6 +104,9 @@ static void stat_callback(uv_timer_t* handle) {
         "[ RUNNING  ] send(" << conf.sum_send_times << " times, " << (conf.sum_send_len / unit_devi[unit_index]) << " " << unit_desc[unit_index] << ") " <<
         "full " << conf.sum_send_full << " times, err " << conf.sum_send_err << " times" <<
         std::endl << std::endl;
+
+    std::cout.flush();
+    std::cerr.flush();
 }
 
 
@@ -115,7 +120,7 @@ int main(int argc, char* argv[])
     using namespace atbus::channel;
     
     if (argc > 2)
-        conf.max_n = (size_t)strtol(argv[2], NULL, 10) / sizeof(size_t);
+        conf.max_n = (size_t)strtol(argv[2], NULL, 10);
     else
         conf.max_n = 1024;
 
@@ -133,6 +138,7 @@ int main(int argc, char* argv[])
         conf.limit_static_num = 0; // dynamic
 
     srand(static_cast<unsigned>(time(NULL)));
+    conf.pending_send = 0;
     conf.sum_send_len = 0;
     conf.sum_send_times = 0;
     conf.sum_send_full = 0;
@@ -142,7 +148,7 @@ int main(int argc, char* argv[])
 
     io_stream_conf cfg;
     io_stream_init_configure(&cfg);
-    cfg.send_buffer_limit_size = conf.limit_size;
+    cfg.send_buffer_max_size = conf.limit_size;
     cfg.send_buffer_static = conf.limit_static_num;
 
     io_stream_channel channel;
@@ -153,7 +159,12 @@ int main(int argc, char* argv[])
     channel_address_t addr;
     make_address(argv[1], addr);
 
-    io_stream_connect(&channel, addr, connect_callback);
+    if(io_stream_connect(&channel, addr, connect_callback) < 0) {
+        std::cerr << "connect to " << argv[1] << " failed." << uv_err_name(channel.error_code) << ":" << uv_strerror(channel.error_code) << std::endl;
+        io_stream_close(&channel);
+        delete[] conf.buff_pool;
+        return -1;
+    }
     
     uv_timer_t stat;
     uv_timer_init(uv_default_loop(), &stat);
@@ -171,7 +182,7 @@ static void send_data(atbus::channel::io_stream_connection* connection) {
 
     assert(connection);
     // 尝试5次,逐渐填满数据
-    for (int try_times = 0; try_times < 5; ++try_times) {
+    for (int try_times = 0; try_times < 2; ++try_times) {
         size_t n = rand() % conf.max_n; // 最大 4K-8K的包
         if (0 == n) n = 1; // 保证一定有数据包，保证收发次数一致
 
@@ -191,6 +202,7 @@ static void send_data(atbus::channel::io_stream_connection* connection) {
                 );
             }
         } else {
+            ++conf.pending_send;
             ++conf.sum_seq;
         }
     }

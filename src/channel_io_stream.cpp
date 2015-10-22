@@ -1178,9 +1178,16 @@ namespace atbus {
             // 弹出丢失的回调
             while(true) {
                 connection->write_buffers.front(data, nread, nwrite);
-                if (NULL == data || 0 == nwrite) {
+                if (NULL == data) {
                     break;
                 }
+
+                if(0 == nwrite) {
+                    connection->write_buffers.pop_front(0, true);
+                }
+
+                assert(0 == nread);
+                assert(req == data);
 
                 // nwrite = uv_write_t的大小+crc32+vint的大小+数据区长度
                 char* buff_start = reinterpret_cast<char*>(data);
@@ -1227,6 +1234,7 @@ namespace atbus {
 
             // 判定内存限制
             void* data;
+            detail::buffer_block* TEST_HEAD = connection->write_buffers.front();
             int res = connection->write_buffers.push_back(data, total_buffer_size);
             if (res < 0) {
                 return res;
@@ -1254,7 +1262,7 @@ namespace atbus {
             res = uv_write(req, connection->handle.get(), bufs, 1, io_stream_on_written_fn);
             if (0 != res) {
                 connection->channel->error_code = res;
-                connection->write_buffers.pop_back(total_buffer_size, false);
+                connection->write_buffers.pop_back(total_buffer_size, true);
                 return EN_ATBUS_ERR_WRITE_FAILED;
             }
 

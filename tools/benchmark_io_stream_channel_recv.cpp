@@ -91,8 +91,25 @@ static void stat_callback(uv_timer_t* handle) {
         "[ RUNNING  ] recv(" << conf.sum_recv_times << " times, " << (conf.sum_recv_len / unit_devi[unit_index]) << " " << unit_desc[unit_index] << ") " <<
         "full " << conf.sum_recv_full << " times, err " << conf.sum_recv_err << " times" <<
         std::endl << std::endl;
+
+    std::cout.flush();
+    std::cerr.flush();
 }
 
+static void closed_callback(
+    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    int status,                         // libuv传入的转态码
+    void*,                              // 额外参数(不同事件不同含义)
+    size_t s                            // 额外参数长度
+    ) {
+    assert(channel);
+    assert(connection);
+
+    // 除listen外的最后一个连接
+    if(channel->conn_pool.size() <= 2)
+    uv_stop(channel->ev_loop);
+}
 
 int main(int argc, char* argv[])
 {
@@ -104,7 +121,7 @@ int main(int argc, char* argv[])
     using namespace atbus::channel;
 
     if (argc > 2)
-        conf.max_n = (size_t)strtol(argv[2], NULL, 10) / sizeof(size_t);
+        conf.max_n = (size_t)strtol(argv[2], NULL, 10);
     else
         conf.max_n = 1024;
     
@@ -122,17 +139,24 @@ int main(int argc, char* argv[])
 
     io_stream_conf cfg;
     io_stream_init_configure(&cfg);
-    cfg.recv_buffer_limit_size = conf.limit_size;
+    cfg.recv_buffer_max_size = conf.limit_size + 
+        atbus::detail::buffer_block::full_size(cfg.recv_buffer_limit_size) * conf.limit_static_num + 
+        atbus::detail::buffer_block::padding_size(1); // 预留一个对齐单位的空区域
     cfg.recv_buffer_static = conf.limit_static_num;
 
     io_stream_channel channel;
     io_stream_init(&channel, uv_default_loop(), &cfg);
     channel.evt.callbacks[io_stream_callback_evt_t::EN_FN_RECVED] = recv_callback;
+    channel.evt.callbacks[io_stream_callback_evt_t::EN_FN_DISCONNECTED] = closed_callback;
 
     channel_address_t addr;
     make_address(argv[1], addr);
 
-    io_stream_listen(&channel, addr, NULL);
+    if(io_stream_listen(&channel, addr, NULL) < 0) {
+        std::cerr << "listen to " << argv[1] << " failed." << uv_err_name(channel.error_code) << ":" << uv_strerror(channel.error_code) << std::endl;
+        io_stream_close(&channel);
+        return -1;
+    }
 
     uv_timer_t stat;
     uv_timer_init(uv_default_loop(), &stat);

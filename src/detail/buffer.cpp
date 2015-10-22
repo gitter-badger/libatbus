@@ -33,7 +33,7 @@ namespace atbus {
             size_t buffer_offset(const void* l, const void* r) {
                 const char* lc = reinterpret_cast<const char*>(l);
                 const char* rc = reinterpret_cast<const char*>(r);
-                return lc < rc? rc - lc: lc - rc;
+                return lc < rc? (rc - lc): (lc - rc);
             }
 
             size_t read_vint(uint64_t& out, const void* pointer, size_t s) {
@@ -157,13 +157,13 @@ namespace atbus {
                 return NULL;
             }
 
-            char* addr = reinterpret_cast<char*>(pointer);
             buffer_block* res = reinterpret_cast<buffer_block*>(pointer);
             res->size_ = bs;
-            res->pointer_ = addr + hs;
+            res->pointer_ = fn::buffer_next(pointer, hs);
             res->used_ = 0;
 
-            return addr + fs;
+            assert(fn::buffer_next(pointer, fs) >= fn::buffer_next(res->pointer_, res->size_));
+            return fn::buffer_next(pointer, fs);
         }
 
         /** init buffer_block as specify address **/
@@ -171,6 +171,11 @@ namespace atbus {
             if (NULL == p) {
                 return NULL;
             }
+
+            // debug 版本做内存填充，方便调试
+#if !defined(NDEBUG) || defined(_DEBUG)
+            memset(p, 0x5e5e5e5e, full_size(p->size_));
+#endif
 
             return fn::buffer_next(p->pointer_, p->size_);
         }
@@ -364,7 +369,9 @@ namespace atbus {
                     assign_tail(next_free);
                 } else { // NN new_tail ... head NNNNNN old_tail ....
                     free_len = fn::buffer_offset(static_buffer_.buffer_, head);
-                    if (free_len < fs) {
+
+                    // 必须预留空区域，不能让new_tail == head
+                    if (free_len <= fs) {
                         return EN_ATBUS_ERR_BUFF_LIMIT;
                     }
 
@@ -380,7 +387,9 @@ namespace atbus {
                 }
             } else { // NNN tail ....  head NNNNNN ....
                 size_t free_len = fn::buffer_offset(tail, head);
-                if (free_len < fs) {
+
+                // 必须预留空区域，不能让new_tail == head
+                if (free_len <= fs) {
                     return EN_ATBUS_ERR_BUFF_LIMIT;
                 }
 
@@ -443,7 +452,9 @@ namespace atbus {
 
                 } else { // ... old_head NNNNNN tail .... new_head NN
                     free_len = fn::buffer_offset(tail, fn::buffer_next(static_buffer_.buffer_, static_buffer_.size_));
-                    if (free_len < fs) {
+
+                    // 必须预留空区域，不能让tail == new_head
+                    if (free_len <= fs) {
                         return EN_ATBUS_ERR_BUFF_LIMIT;
                     }
 
@@ -458,7 +469,9 @@ namespace atbus {
 
             } else { // NNN tail ....  head NNNNNN ....
                 size_t free_len = fn::buffer_offset(tail, head);
-                if (free_len < fs) {
+
+                // 必须预留空区域，不能让tail == new_head
+                if (free_len <= fs) {
                     return EN_ATBUS_ERR_BUFF_LIMIT;
                 }
 

@@ -441,7 +441,7 @@ CASE_TEST(buffer, static_buffer_manager_circle_bf)
     CASE_EXPECT_EQ(3, mgr.limit().cost_number_);
     CHECK_BUFFER(mgr.front()->raw_data(), mgr.front()->raw_size(), 0xFF);
 
-    res = mgr.push_back(check_ptr[3], 384 - atbus::detail::buffer_block::head_size(100) - atbus::detail::buffer_block::head_size(412));
+    res = mgr.push_back(check_ptr[3], 384 - atbus::detail::buffer_block::head_size(100) - atbus::detail::buffer_block::head_size(412) - atbus::detail::buffer_block::padding_size(1));
     CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, res);
     CASE_EXPECT_EQ(4, mgr.limit().cost_number_);
 
@@ -603,11 +603,11 @@ CASE_TEST(buffer, static_buffer_manager_fb)
     res = mgr.push_front(pointer, 257 - atbus::detail::buffer_block::head_size(257));
     CASE_EXPECT_EQ(EN_ATBUS_ERR_BUFF_LIMIT, res);
     CASE_EXPECT_EQ(NULL, pointer);
-    res = mgr.push_front(pointer, 255 - atbus::detail::buffer_block::head_size(255));
+    res = mgr.push_front(pointer, 255 - atbus::detail::buffer_block::head_size(255) - atbus::detail::buffer_block::padding_size(1));
     CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, res);
     CASE_EXPECT_NE(NULL, pointer);
 
-    CASE_EXPECT_EQ(1023, mgr.limit().cost_size_ + atbus::detail::buffer_block::head_size(255) + 3 * atbus::detail::buffer_block::head_size(256));
+    CASE_EXPECT_EQ(1023 - atbus::detail::buffer_block::padding_size(1), mgr.limit().cost_size_ + atbus::detail::buffer_block::head_size(255) + 3 * atbus::detail::buffer_block::head_size(256));
     CASE_EXPECT_EQ(4, mgr.limit().cost_number_);
 
     mgr.reset();
@@ -733,12 +733,12 @@ CASE_TEST(buffer, static_buffer_manager_circle_fb)
     res = mgr.push_front(pointer, 257 - atbus::detail::buffer_block::head_size(257));
     CASE_EXPECT_EQ(EN_ATBUS_ERR_BUFF_LIMIT, res);
     CASE_EXPECT_EQ(NULL, pointer);
-    res = mgr.push_front(pointer, s = 255 - atbus::detail::buffer_block::head_size(255));
+    res = mgr.push_front(pointer, s = 255 - atbus::detail::buffer_block::head_size(255) - atbus::detail::buffer_block::padding_size(1));
     CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, res);
     CASE_EXPECT_NE(NULL, pointer);
     memset(pointer, -1, s);
 
-    CASE_EXPECT_EQ(1023, mgr.limit().cost_size_ + atbus::detail::buffer_block::head_size(255) + 3 * atbus::detail::buffer_block::head_size(256));
+    CASE_EXPECT_EQ(1023 - atbus::detail::buffer_block::padding_size(1), mgr.limit().cost_size_ + atbus::detail::buffer_block::head_size(255) + 3 * atbus::detail::buffer_block::head_size(256));
     CASE_EXPECT_EQ(4, mgr.limit().cost_number_);
 
     mgr.pop_back(256, false);
@@ -770,7 +770,7 @@ CASE_TEST(buffer, static_buffer_manager_circle_fb)
     CASE_EXPECT_EQ(3, mgr.limit().cost_number_);
     CHECK_BUFFER(mgr.back()->raw_data(), mgr.back()->raw_size(), 0x00);
 
-    res = mgr.push_front(check_ptr[3], 384 - atbus::detail::buffer_block::head_size(100) - atbus::detail::buffer_block::head_size(412));
+    res = mgr.push_front(check_ptr[3], 384 - atbus::detail::buffer_block::head_size(100) - atbus::detail::buffer_block::head_size(412) - atbus::detail::buffer_block::padding_size(1));
     CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, res);
     CASE_EXPECT_EQ(4, mgr.limit().cost_number_);
 
