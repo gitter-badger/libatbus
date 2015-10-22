@@ -1234,7 +1234,6 @@ namespace atbus {
 
             // 判定内存限制
             void* data;
-            detail::buffer_block* TEST_HEAD = connection->write_buffers.front();
             int res = connection->write_buffers.push_back(data, total_buffer_size);
             if (res < 0) {
                 return res;
