@@ -1,4 +1,4 @@
-﻿#!/bin/sh
+#!/bin/sh
 
 ADDRESS="ipv6://::1:16389";
 UNIT_SIZE=1024 ;

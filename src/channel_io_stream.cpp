@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 #endif
 
-#include "detail/std/smart_ptr.h"
+#include "std/smart_ptr.h"
 
 #include "detail/libatbus_error.h"
 #include "detail/libatbus_channel_export.h"
@@ -488,6 +488,11 @@ namespace atbus {
             if (iter != channel->conn_pool.end()) {
                 iter->second->status = io_stream_connection::EN_ST_DISCONNECTIED;
                 io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_DISCONNECTED, channel, iter->second.get(), 0, EN_ATBUS_ERR_SUCCESS, NULL, 0);
+
+                if(NULL != conn_raw_ptr->act_disc_cbk) {
+                    conn_raw_ptr->act_disc_cbk(channel, conn_raw_ptr, EN_ATBUS_ERR_SUCCESS, NULL, 0);
+                }
+
                 channel->conn_pool.erase(iter);
             }
         }
@@ -514,6 +519,7 @@ namespace atbus {
             handle->data = ret.get();
 
             memset(ret->evt.callbacks, 0, sizeof(ret->evt.callbacks));
+            ret->act_disc_cbk = NULL;
             ret->status = io_stream_connection::EN_ST_CREATED;
 
 
@@ -1145,7 +1151,7 @@ namespace atbus {
                 return EN_ATBUS_ERR_PARAMS;
             }
 
-            connection->evt.callbacks[io_stream_callback_evt_t::EN_FN_DISCONNECTED] = callback;
+            connection->act_disc_cbk = callback;
 
             if (0 == uv_is_closing(reinterpret_cast<uv_handle_t*>(connection->handle.get()))) {
                 uv_close(reinterpret_cast<uv_handle_t*>(connection->handle.get()), io_stream_connection_on_close);

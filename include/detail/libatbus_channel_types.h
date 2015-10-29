@@ -90,8 +90,8 @@ namespace atbus {
         // 以下不是POD类型，所以不得不暴露出来
         struct io_stream_connection {
             channel_address_t                   addr;
-            std::shared_ptr<adapter::stream_t>  handle;             // 流设备
-            adapter::fd_t                       fd;                 // 文件描述符
+            std::shared_ptr<adapter::stream_t>  handle;                 // 流设备
+            adapter::fd_t                       fd;                     // 文件描述符
 
             typedef enum {
                 EN_ST_CREATED = 0,
@@ -100,11 +100,12 @@ namespace atbus {
                 EN_ST_CONFIRMED,
                 EN_ST_DISCONNECTIED
             } status_t;
-            status_t                            status;             // 状态
+            status_t                            status;                 // 状态
             io_stream_channel*                  channel;
 
             // 事件响应
             mutable io_stream_callback_evt_t            evt;
+            io_stream_callback_t                        act_disc_cbk;   // 主动关闭连接的回调（为了减少额外分配而采用的缓存策略）
 
             // 数据区域
             detail::buffer_manager read_buffers;            // 读数据缓冲区(两种Buffer管理方式，一种动态，一种静态)

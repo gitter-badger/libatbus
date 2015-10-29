@@ -20,5 +20,6 @@ foreach(SAMPLE_SRC_FILE IN LISTS SAMPLE_SRC_LIST)
     target_link_libraries("${SAMPLE_SRC_BIN_NAME}" 
 	    ${PROJECT_LIB_LINK} 
 		${3RD_PARTY_LIBUV_LINK_NAME}
+        ${3RD_PARTY_C_CPP_UTILS_LINK_NAME}
     )
 endforeach()

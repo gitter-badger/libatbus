@@ -18,7 +18,7 @@ FindConfigurePackage(
     WORKING_DIRECTORY "${3RD_PARTY_LIBUV_PKG_DIR}"
     PREFIX_DIRECTORY "${3RD_PARTY_LIBUV_ROOT_DIR}"
     SRC_DIRECTORY_NAME "libuv-v1.7.5"
-    TAR_URL "http://dist.libuv.org/dist/v1.7.4/libuv-v1.7.5.tar.gz"
+    TAR_URL "http://dist.libuv.org/dist/v1.7.5/libuv-v1.7.5.tar.gz"
 )
 
 if(Libuv_FOUND)
