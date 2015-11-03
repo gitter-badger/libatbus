@@ -16,6 +16,8 @@ file(GLOB_RECURSE PROJECT_LIB_SRC_LIST
     ${PROJECT_ROOT_SRC_DIR}/*.cpp
     ${PROJECT_ROOT_SRC_DIR}/*.cc 
     ${PROJECT_ROOT_SRC_DIR}/*.cxx
+    
+    ../protocol/src/*.cpp
 )
 source_group_by_dir(PROJECT_LIB_SRC_LIST)
 

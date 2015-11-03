@@ -19,9 +19,10 @@
 #include <numeric>
 
 #include "detail/libatbus_error.h"
+#include "detail/libatbus_config.h"
 #include "detail/crc32.h"
 #include "detail/crc64.h"
-#include "detail/std/thread.h"
+#include "std/thread.h"
 
 #ifndef ATBUS_MACRO_DATA_NODE_SIZE
 #define ATBUS_MACRO_DATA_NODE_SIZE 128
@@ -30,6 +31,8 @@
 #ifndef ATBUS_MACRO_DATA_ALIGN_TYPE
 #define ATBUS_MACRO_DATA_ALIGN_TYPE size_t
 #endif
+
+#define MEM_CHANNEL_NAME "ATBUSMEM"
 
 namespace atbus {
     namespace channel {
@@ -72,6 +75,8 @@ namespace atbus {
 
         // 通道头
         typedef struct {
+            char node_magic[8]; // 魔术串，用于标识数据类型
+
             // 数据节点
             size_t node_size;
             size_t node_size_bin_power; // (用于优化算法) node_size = 1 << node_size_bin_power
@@ -166,7 +171,7 @@ namespace atbus {
          * @return 检查结果flag
          */
         static inline bool check_flag(uint32_t flag, MEM_FLAG checked) {
-            return flag & checked;
+            return !!(flag & checked);
         }
 
         /**
@@ -328,6 +333,10 @@ namespace atbus {
             if (channel)
                 *channel = &head->channel;
 
+            if(0 != ATBUS_FUNC_STRCASE_CMP(MEM_CHANNEL_NAME, head->channel.node_magic)) {
+                return EN_ATBUS_ERR_CHANNEL_BUFFER_INVALID;
+            }
+
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -367,6 +376,7 @@ namespace atbus {
             if (channel)
                 *channel = &head->channel;
 
+            strncpy(head->channel.node_magic, MEM_CHANNEL_NAME, sizeof(head->channel.node_magic));
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -723,7 +733,7 @@ namespace atbus {
                     unsigned char* data_c = (unsigned char*)data_ptr;
                     char data_buf[4] = {0};
                     for (size_t j = 0; data_c && j < data_len && j < need_node_data; ++ j) {
-                        sprintf(data_buf, "%02x", data_c[j]);
+                        ATBUS_FUNC_SNPRINTF(data_buf, sizeof(data_buf), "%02x", data_c[j]);
                         out<< data_buf;
                     }
                     out<<std::endl;

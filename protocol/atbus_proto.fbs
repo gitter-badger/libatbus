@@ -2,18 +2,6 @@
 
 namespace atbus.protocol;
 
-enum ERROR_CODE: int {
-    EC_SUCCESS = 0,
-    EC_UNKNOWN = -1,
-
-    // 节点错误
-    EC_NODE_EXISTS         = -1001,
-    EC_NODE_NOT_FOUND      = -1002,
-    EC_NODE_BUSID_INVALID  = -1003  // 无效的BUS ID
-
-    // 数据传输错误
-}
-
 enum CMD:byte { 
     CMD_INVALID = 0,
 
@@ -57,11 +45,14 @@ table node_data {
     channels: [channel_data]; // 当前节点绑定的通道
 }
 
-struct node_tree {
+table node_tree {
     nodes: [node_data];
 }
 
-union msg_body { data_transform, node_tree }  
+table msg_body { 
+    transfer:data_transform (id: 0);
+    nodes: node_tree (id: 1);
+}  
 
 table msg_head {
     cmd: CMD;

@@ -3,6 +3,12 @@
 #ifndef LIBATBUS_DETAIL_LIBATBUS_CONFIG_H_
 #define LIBATBUS_DETAIL_LIBATBUS_CONFIG_H_
 
+#include <stdint.h>
+
+#ifndef ATBUS_MACRO_BUSID_TYPE
+#define ATBUS_MACRO_BUSID_TYPE uint64_t
+#endif
+
 #ifndef ATBUS_MACRO_MSG_LIMIT
 #define ATBUS_MACRO_MSG_LIMIT 65536
 #endif
@@ -25,7 +31,6 @@
 #define ATBUS_FUNC_STRNCASE_CMP(l, r, s) _strnicmp(l, r, s)
 #define ATBUS_FUNC_SSCANF(...) sscanf_s(__VA_ARGS__)
 #define ATBUS_FUNC_SNPRINTF(...) sprintf_s(__VA_ARGS__)
-
 #else
 #define ATBUS_FUNC_STRCASE_CMP(l, r) strcasecmp(l, r)
 #define ATBUS_FUNC_STRNCASE_CMP(l, r, s) strncasecmp(l, r, s)
