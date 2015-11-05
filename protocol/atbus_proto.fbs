@@ -56,6 +56,7 @@ table msg_body {
 
 table msg_head {
     cmd: CMD;
+    type: int = 0;
     ret: int = 0;
 }
 

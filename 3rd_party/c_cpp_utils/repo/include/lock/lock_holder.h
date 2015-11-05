@@ -7,7 +7,7 @@
  * @author owent
  * @date 2015-06-29
  *
- * @note 实现锁的自管理操作
+ * @note 实现锁的自管理操作,类似std::lock_guard，增加了针对特定场合使用的try_unlock函数
  *
  * @history
  */

@@ -182,11 +182,13 @@ inline flatbuffers::Offset<msg_body> Createmsg_body(flatbuffers::FlatBufferBuild
 
 struct msg_head FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   CMD cmd() const { return static_cast<CMD>(GetField<int8_t>(4, 0)); }
-  int32_t ret() const { return GetField<int32_t>(6, 0); }
+  int32_t type() const { return GetField<int32_t>(6, 0); }
+  int32_t ret() const { return GetField<int32_t>(8, 0); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int8_t>(verifier, 4 /* cmd */) &&
-           VerifyField<int32_t>(verifier, 6 /* ret */) &&
+           VerifyField<int32_t>(verifier, 6 /* type */) &&
+           VerifyField<int32_t>(verifier, 8 /* ret */) &&
            verifier.EndTable();
   }
 };
@@ -195,20 +197,23 @@ struct msg_headBuilder {
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
   void add_cmd(CMD cmd) { fbb_.AddElement<int8_t>(4, static_cast<int8_t>(cmd), 0); }
-  void add_ret(int32_t ret) { fbb_.AddElement<int32_t>(6, ret, 0); }
+  void add_type(int32_t type) { fbb_.AddElement<int32_t>(6, type, 0); }
+  void add_ret(int32_t ret) { fbb_.AddElement<int32_t>(8, ret, 0); }
   msg_headBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
   msg_headBuilder &operator=(const msg_headBuilder &);
   flatbuffers::Offset<msg_head> Finish() {
-    auto o = flatbuffers::Offset<msg_head>(fbb_.EndTable(start_, 2));
+    auto o = flatbuffers::Offset<msg_head>(fbb_.EndTable(start_, 3));
     return o;
   }
 };
 
 inline flatbuffers::Offset<msg_head> Createmsg_head(flatbuffers::FlatBufferBuilder &_fbb,
    CMD cmd = CMD_CMD_INVALID,
+   int32_t type = 0,
    int32_t ret = 0) {
   msg_headBuilder builder_(_fbb);
   builder_.add_ret(ret);
+  builder_.add_type(type);
   builder_.add_cmd(cmd);
   return builder_.Finish();
 }

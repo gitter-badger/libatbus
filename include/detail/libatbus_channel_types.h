@@ -154,6 +154,9 @@ namespace atbus {
 
             int error_code; // 记录外部的错误码
             // 统计信息
+
+            // 自定义数据区域
+            void* data;
         };
     }
 }
