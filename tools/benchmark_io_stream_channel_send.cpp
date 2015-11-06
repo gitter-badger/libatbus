@@ -30,8 +30,8 @@ run_config conf;
 static void send_data(atbus::channel::io_stream_connection* connection);
 
 static void connect_callback(
-    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
-    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    atbus::channel::io_stream_connection* connection,   // 事件触发的连接
     int status,                         // libuv传入的转态码
     void*,                              // 额外参数(不同事件不同含义)
     size_t s                            // 额外参数长度
@@ -48,8 +48,8 @@ static void connect_callback(
 }
 
 static void sended_callback(
-    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
-    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    atbus::channel::io_stream_connection* connection,   // 事件触发的连接
     int status,                         // libuv传入的转态码
     void*,                              // 额外参数(不同事件不同含义)
     size_t s                            // 额外参数长度
@@ -74,8 +74,8 @@ static void sended_callback(
 }
 
 static void closed_callback(
-    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
-    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    atbus::channel::io_stream_connection* connection,   // 事件触发的连接
     int status,                         // libuv传入的转态码
     void*,                              // 额外参数(不同事件不同含义)
     size_t s                            // 额外参数长度

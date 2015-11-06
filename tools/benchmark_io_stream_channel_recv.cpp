@@ -26,8 +26,8 @@ struct run_config {
 run_config conf;
 
 static void recv_callback(
-    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
-    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    atbus::channel::io_stream_connection* connection,   // 事件触发的连接
     int status,                                                 // libuv传入的转态码
     void* buff,                                                 // 额外参数(不同事件不同含义)
     size_t s                                                    // 额外参数长度
@@ -97,8 +97,8 @@ static void stat_callback(uv_timer_t* handle) {
 }
 
 static void closed_callback(
-    const atbus::channel::io_stream_channel* channel,         // 事件触发的channel
-    const atbus::channel::io_stream_connection* connection,   // 事件触发的连接
+    atbus::channel::io_stream_channel* channel,         // 事件触发的channel
+    atbus::channel::io_stream_connection* connection,   // 事件触发的连接
     int status,                         // libuv传入的转态码
     void*,                              // 额外参数(不同事件不同含义)
     size_t s                            // 额外参数长度

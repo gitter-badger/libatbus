@@ -1,7 +1,7 @@
 libatbus
 ========
 
-用于搭建高性能、全异步、树形结构的BUS消息系统的跨平台框架库
+用于搭建高性能、全异步(a)、树形结构(t)的BUS消息系统的跨平台框架库
 
 依赖
 ------
@@ -29,7 +29,7 @@ Why not c?
 ------
 Linux下 GCC编译安装脚本(支持离线编译安装):
 
-1. [GCC 4.9.X](https://github.com/owt5008137/OWenT-s-Utils/tree/master/Bash%26Shell/GCC%20Installer/gcc-4.9)
-2. [GCC 4.8.X](https://github.com/owt5008137/OWenT-s-Utils/tree/master/Bash%26Shell/GCC%20Installer/gcc-4.8)
-
+1. [GCC 5.X.X](https://github.com/owent-utils/bash-shell/tree/master/GCC%20Installer/gcc-5)
+2. [GCC 4.9.X](https://github.com/owent-utils/bash-shell/tree/master/GCC%20Installer/gcc-4.9)
+3. [LLVM & Clang](https://github.com/owent-utils/bash-shell/tree/master/LLVM%26Clang%20Installer)
 

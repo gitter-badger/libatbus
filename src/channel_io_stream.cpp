@@ -118,7 +118,6 @@ namespace atbus {
             conf->recv_buffer_max_size = ATBUS_MACRO_MSG_LIMIT * conf->recv_buffer_static;
             conf->recv_buffer_limit_size = ATBUS_MACRO_MSG_LIMIT;
 
-            conf->confirm_timeout = ATBUS_MACRO_CONNECTION_CONFIRM_TIMEOUT;
             conf->backlog = ATBUS_MACRO_CONNECTION_BACKLOG;
         }
 
@@ -325,6 +324,7 @@ namespace atbus {
                             0,
                             errcode,
                             buff_start + sizeof(uint32_t) + vint_len,
+                            // 这里的地址未对齐，所以buffer不能直接保存内存数据
                             msg_len
                         );
 
@@ -391,6 +391,7 @@ namespace atbus {
                     0,
                     errcode,
                     reinterpret_cast<char*>(data) + sizeof(uint32_t),   // + crc32 header
+                    // 由于buffer_block内取出的数据已经保证了字节对齐，所以这里一定是4字节对齐
                     msg_len
                 );
 
@@ -407,6 +408,7 @@ namespace atbus {
                         0,
                         EN_ATBUS_ERR_INVALID_SIZE,
                         conn_raw_ptr->read_head.buffer,
+                        // 由于buffer_block内取出的数据已经保证了字节对齐，所以这里一定是4字节对齐
                         conn_raw_ptr->read_head.len
                         );
                 }
@@ -1289,7 +1291,6 @@ namespace atbus {
                 "is_nodelay: " << channel->conf.is_nodelay << std::endl <<
                 "backlog: " << channel->conf.backlog << std::endl <<
                 "keepalive: " << channel->conf.keepalive << std::endl <<
-                "confirm_timeout: " << channel->conf.confirm_timeout << std::endl <<
                 "recv_buffer_limit_size(Bytes): " << channel->conf.recv_buffer_limit_size << std::endl <<
                 "recv_buffer_max_size(Bytes): " << channel->conf.recv_buffer_max_size << std::endl <<
                 "recv_buffer_static_max_number: " << channel->conf.recv_buffer_static << std::endl <<

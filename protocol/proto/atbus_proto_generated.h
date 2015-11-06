@@ -9,10 +9,13 @@
 namespace atbus {
 namespace protocol {
 
-struct data_transform;
+struct forward_data;
 struct channel_data;
 struct node_data;
 struct node_tree;
+struct ping_data;
+struct reg_data;
+struct conn_data;
 struct msg_body;
 struct msg_head;
 struct msg;
@@ -23,42 +26,93 @@ enum CMD {
   CMD_CMD_DATA_TRANSFORM_RSP = 2,
   CMD_CMD_NODE_SYNC_REQ = 33,
   CMD_CMD_NODE_SYNC_RSP = 34,
-  CMD_CMD_NODE_ADD_REQ = 35,
-  CMD_CMD_NODE_ADD_RSP = 36,
-  CMD_CMD_NODE_MOD_REQ = 37,
-  CMD_CMD_NODE_MOD_RSP = 38,
-  CMD_CMD_NODE_DEL_REQ = 39,
-  CMD_CMD_NODE_DEL_RSP = 40
+  CMD_CMD_NODE_REG_REQ = 35,
+  CMD_CMD_NODE_REG_RSP = 36,
+  CMD_CMD_NODE_CONN_SYN = 38,
+  CMD_CMD_NODE_PING = 39,
+  CMD_CMD_NODE_PONG = 40
 };
 
 inline const char **EnumNamesCMD() {
-  static const char *names[] = { "CMD_INVALID", "CMD_DATA_TRANSFORM_REQ", "CMD_DATA_TRANSFORM_RSP", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "CMD_NODE_SYNC_REQ", "CMD_NODE_SYNC_RSP", "CMD_NODE_ADD_REQ", "CMD_NODE_ADD_RSP", "CMD_NODE_MOD_REQ", "CMD_NODE_MOD_RSP", "CMD_NODE_DEL_REQ", "CMD_NODE_DEL_RSP", nullptr };
+  static const char *names[] = { "CMD_INVALID", "CMD_DATA_TRANSFORM_REQ", "CMD_DATA_TRANSFORM_RSP", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "CMD_NODE_SYNC_REQ", "CMD_NODE_SYNC_RSP", "CMD_NODE_REG_REQ", "CMD_NODE_REG_RSP", "", "CMD_NODE_CONN_SYN", "CMD_NODE_PING", "CMD_NODE_PONG", nullptr };
   return names;
 }
 
 inline const char *EnumNameCMD(CMD e) { return EnumNamesCMD()[static_cast<int>(e)]; }
 
-MANUALLY_ALIGNED_STRUCT(1) data_transform FLATBUFFERS_FINAL_CLASS {
- private:
-
- public:
-  data_transform()
-    :  { }
-
+struct forward_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  uint64_t from() const { return GetField<uint64_t>(4, 0); }
+  uint64_t to() const { return GetField<uint64_t>(6, 0); }
+  const flatbuffers::Vector<uint64_t> *router() const { return GetPointer<const flatbuffers::Vector<uint64_t> *>(8); }
+  const flatbuffers::Vector<int8_t> *content() const { return GetPointer<const flatbuffers::Vector<int8_t> *>(10); }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, 4 /* from */) &&
+           VerifyField<uint64_t>(verifier, 6 /* to */) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 8 /* router */) &&
+           verifier.Verify(router()) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 10 /* content */) &&
+           verifier.Verify(content()) &&
+           verifier.EndTable();
+  }
 };
-STRUCT_END(data_transform, 0);
 
-MANUALLY_ALIGNED_STRUCT(4) channel_data FLATBUFFERS_FINAL_CLASS {
- private:
-  uint32_t priority_;
-
- public:
-  channel_data(uint32_t priority)
-    : priority_(flatbuffers::EndianScalar(priority)) { }
-
-  uint32_t priority() const { return flatbuffers::EndianScalar(priority_); }
+struct forward_dataBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_from(uint64_t from) { fbb_.AddElement<uint64_t>(4, from, 0); }
+  void add_to(uint64_t to) { fbb_.AddElement<uint64_t>(6, to, 0); }
+  void add_router(flatbuffers::Offset<flatbuffers::Vector<uint64_t>> router) { fbb_.AddOffset(8, router); }
+  void add_content(flatbuffers::Offset<flatbuffers::Vector<int8_t>> content) { fbb_.AddOffset(10, content); }
+  forward_dataBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
+  forward_dataBuilder &operator=(const forward_dataBuilder &);
+  flatbuffers::Offset<forward_data> Finish() {
+    auto o = flatbuffers::Offset<forward_data>(fbb_.EndTable(start_, 4));
+    return o;
+  }
 };
-STRUCT_END(channel_data, 4);
+
+inline flatbuffers::Offset<forward_data> Createforward_data(flatbuffers::FlatBufferBuilder &_fbb,
+   uint64_t from = 0,
+   uint64_t to = 0,
+   flatbuffers::Offset<flatbuffers::Vector<uint64_t>> router = 0,
+   flatbuffers::Offset<flatbuffers::Vector<int8_t>> content = 0) {
+  forward_dataBuilder builder_(_fbb);
+  builder_.add_to(to);
+  builder_.add_from(from);
+  builder_.add_content(content);
+  builder_.add_router(router);
+  return builder_.Finish();
+}
+
+struct channel_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  const flatbuffers::String *address() const { return GetPointer<const flatbuffers::String *>(4); }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 4 /* address */) &&
+           verifier.Verify(address()) &&
+           verifier.EndTable();
+  }
+};
+
+struct channel_dataBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_address(flatbuffers::Offset<flatbuffers::String> address) { fbb_.AddOffset(4, address); }
+  channel_dataBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
+  channel_dataBuilder &operator=(const channel_dataBuilder &);
+  flatbuffers::Offset<channel_data> Finish() {
+    auto o = flatbuffers::Offset<channel_data>(fbb_.EndTable(start_, 1));
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<channel_data> Createchannel_data(flatbuffers::FlatBufferBuilder &_fbb,
+   flatbuffers::Offset<flatbuffers::String> address = 0) {
+  channel_dataBuilder builder_(_fbb);
+  builder_.add_address(address);
+  return builder_.Finish();
+}
 
 struct node_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   uint64_t bus_id() const { return GetField<uint64_t>(4, 0); }
@@ -66,7 +120,6 @@ struct node_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   uint8_t has_global_tree() const { return GetField<uint8_t>(8, 0); }
   uint8_t children_id_mask() const { return GetField<uint8_t>(10, 0); }
   const flatbuffers::Vector<flatbuffers::Offset<node_data>> *children() const { return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<node_data>> *>(12); }
-  const flatbuffers::Vector<const channel_data *> *channels() const { return GetPointer<const flatbuffers::Vector<const channel_data *> *>(14); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, 4 /* bus_id */) &&
@@ -76,8 +129,6 @@ struct node_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyField<flatbuffers::uoffset_t>(verifier, 12 /* children */) &&
            verifier.Verify(children()) &&
            verifier.VerifyVectorOfTables(children()) &&
-           VerifyField<flatbuffers::uoffset_t>(verifier, 14 /* channels */) &&
-           verifier.Verify(channels()) &&
            verifier.EndTable();
   }
 };
@@ -90,11 +141,10 @@ struct node_dataBuilder {
   void add_has_global_tree(uint8_t has_global_tree) { fbb_.AddElement<uint8_t>(8, has_global_tree, 0); }
   void add_children_id_mask(uint8_t children_id_mask) { fbb_.AddElement<uint8_t>(10, children_id_mask, 0); }
   void add_children(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<node_data>>> children) { fbb_.AddOffset(12, children); }
-  void add_channels(flatbuffers::Offset<flatbuffers::Vector<const channel_data *>> channels) { fbb_.AddOffset(14, channels); }
   node_dataBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
   node_dataBuilder &operator=(const node_dataBuilder &);
   flatbuffers::Offset<node_data> Finish() {
-    auto o = flatbuffers::Offset<node_data>(fbb_.EndTable(start_, 6));
+    auto o = flatbuffers::Offset<node_data>(fbb_.EndTable(start_, 5));
     return o;
   }
 };
@@ -104,11 +154,9 @@ inline flatbuffers::Offset<node_data> Createnode_data(flatbuffers::FlatBufferBui
    uint8_t overwrite = 0,
    uint8_t has_global_tree = 0,
    uint8_t children_id_mask = 0,
-   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<node_data>>> children = 0,
-   flatbuffers::Offset<flatbuffers::Vector<const channel_data *>> channels = 0) {
+   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<node_data>>> children = 0) {
   node_dataBuilder builder_(_fbb);
   builder_.add_bus_id(bus_id);
-  builder_.add_channels(channels);
   builder_.add_children(children);
   builder_.add_children_id_mask(children_id_mask);
   builder_.add_has_global_tree(has_global_tree);
@@ -146,14 +194,132 @@ inline flatbuffers::Offset<node_tree> Createnode_tree(flatbuffers::FlatBufferBui
   return builder_.Finish();
 }
 
-struct msg_body FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-  const data_transform *transfer() const { return GetStruct<const data_transform *>(4); }
-  const node_tree *nodes() const { return GetPointer<const node_tree *>(6); }
+struct ping_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  uint64_t id() const { return GetField<uint64_t>(4, 0); }
+  int64_t time() const { return GetField<int64_t>(6, 0); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<data_transform>(verifier, 4 /* transfer */) &&
-           VerifyField<flatbuffers::uoffset_t>(verifier, 6 /* nodes */) &&
-           verifier.VerifyTable(nodes()) &&
+           VerifyField<uint64_t>(verifier, 4 /* id */) &&
+           VerifyField<int64_t>(verifier, 6 /* time */) &&
+           verifier.EndTable();
+  }
+};
+
+struct ping_dataBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_id(uint64_t id) { fbb_.AddElement<uint64_t>(4, id, 0); }
+  void add_time(int64_t time) { fbb_.AddElement<int64_t>(6, time, 0); }
+  ping_dataBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
+  ping_dataBuilder &operator=(const ping_dataBuilder &);
+  flatbuffers::Offset<ping_data> Finish() {
+    auto o = flatbuffers::Offset<ping_data>(fbb_.EndTable(start_, 2));
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ping_data> Createping_data(flatbuffers::FlatBufferBuilder &_fbb,
+   uint64_t id = 0,
+   int64_t time = 0) {
+  ping_dataBuilder builder_(_fbb);
+  builder_.add_time(time);
+  builder_.add_id(id);
+  return builder_.Finish();
+}
+
+struct reg_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  uint64_t id() const { return GetField<uint64_t>(4, 0); }
+  int32_t pid() const { return GetField<int32_t>(6, 0); }
+  const flatbuffers::String *hostname() const { return GetPointer<const flatbuffers::String *>(8); }
+  const flatbuffers::Vector<flatbuffers::Offset<channel_data>> *channels() const { return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<channel_data>> *>(10); }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, 4 /* id */) &&
+           VerifyField<int32_t>(verifier, 6 /* pid */) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 8 /* hostname */) &&
+           verifier.Verify(hostname()) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 10 /* channels */) &&
+           verifier.Verify(channels()) &&
+           verifier.VerifyVectorOfTables(channels()) &&
+           verifier.EndTable();
+  }
+};
+
+struct reg_dataBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_id(uint64_t id) { fbb_.AddElement<uint64_t>(4, id, 0); }
+  void add_pid(int32_t pid) { fbb_.AddElement<int32_t>(6, pid, 0); }
+  void add_hostname(flatbuffers::Offset<flatbuffers::String> hostname) { fbb_.AddOffset(8, hostname); }
+  void add_channels(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<channel_data>>> channels) { fbb_.AddOffset(10, channels); }
+  reg_dataBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
+  reg_dataBuilder &operator=(const reg_dataBuilder &);
+  flatbuffers::Offset<reg_data> Finish() {
+    auto o = flatbuffers::Offset<reg_data>(fbb_.EndTable(start_, 4));
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<reg_data> Createreg_data(flatbuffers::FlatBufferBuilder &_fbb,
+   uint64_t id = 0,
+   int32_t pid = 0,
+   flatbuffers::Offset<flatbuffers::String> hostname = 0,
+   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<channel_data>>> channels = 0) {
+  reg_dataBuilder builder_(_fbb);
+  builder_.add_id(id);
+  builder_.add_channels(channels);
+  builder_.add_hostname(hostname);
+  builder_.add_pid(pid);
+  return builder_.Finish();
+}
+
+struct conn_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  const channel_data *address() const { return GetPointer<const channel_data *>(4); }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 4 /* address */) &&
+           verifier.VerifyTable(address()) &&
+           verifier.EndTable();
+  }
+};
+
+struct conn_dataBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_address(flatbuffers::Offset<channel_data> address) { fbb_.AddOffset(4, address); }
+  conn_dataBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
+  conn_dataBuilder &operator=(const conn_dataBuilder &);
+  flatbuffers::Offset<conn_data> Finish() {
+    auto o = flatbuffers::Offset<conn_data>(fbb_.EndTable(start_, 1));
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<conn_data> Createconn_data(flatbuffers::FlatBufferBuilder &_fbb,
+   flatbuffers::Offset<channel_data> address = 0) {
+  conn_dataBuilder builder_(_fbb);
+  builder_.add_address(address);
+  return builder_.Finish();
+}
+
+struct msg_body FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  const forward_data *forward() const { return GetPointer<const forward_data *>(4); }
+  const node_tree *sync() const { return GetPointer<const node_tree *>(6); }
+  const ping_data *ping() const { return GetPointer<const ping_data *>(8); }
+  const reg_data *reg() const { return GetPointer<const reg_data *>(10); }
+  const conn_data *conn() const { return GetPointer<const conn_data *>(12); }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 4 /* forward */) &&
+           verifier.VerifyTable(forward()) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 6 /* sync */) &&
+           verifier.VerifyTable(sync()) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 8 /* ping */) &&
+           verifier.VerifyTable(ping()) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 10 /* reg */) &&
+           verifier.VerifyTable(reg()) &&
+           VerifyField<flatbuffers::uoffset_t>(verifier, 12 /* conn */) &&
+           verifier.VerifyTable(conn()) &&
            verifier.EndTable();
   }
 };
@@ -161,22 +327,31 @@ struct msg_body FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
 struct msg_bodyBuilder {
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
-  void add_transfer(const data_transform *transfer) { fbb_.AddStruct(4, transfer); }
-  void add_nodes(flatbuffers::Offset<node_tree> nodes) { fbb_.AddOffset(6, nodes); }
+  void add_forward(flatbuffers::Offset<forward_data> forward) { fbb_.AddOffset(4, forward); }
+  void add_sync(flatbuffers::Offset<node_tree> sync) { fbb_.AddOffset(6, sync); }
+  void add_ping(flatbuffers::Offset<ping_data> ping) { fbb_.AddOffset(8, ping); }
+  void add_reg(flatbuffers::Offset<reg_data> reg) { fbb_.AddOffset(10, reg); }
+  void add_conn(flatbuffers::Offset<conn_data> conn) { fbb_.AddOffset(12, conn); }
   msg_bodyBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
   msg_bodyBuilder &operator=(const msg_bodyBuilder &);
   flatbuffers::Offset<msg_body> Finish() {
-    auto o = flatbuffers::Offset<msg_body>(fbb_.EndTable(start_, 2));
+    auto o = flatbuffers::Offset<msg_body>(fbb_.EndTable(start_, 5));
     return o;
   }
 };
 
 inline flatbuffers::Offset<msg_body> Createmsg_body(flatbuffers::FlatBufferBuilder &_fbb,
-   const data_transform *transfer = 0,
-   flatbuffers::Offset<node_tree> nodes = 0) {
+   flatbuffers::Offset<forward_data> forward = 0,
+   flatbuffers::Offset<node_tree> sync = 0,
+   flatbuffers::Offset<ping_data> ping = 0,
+   flatbuffers::Offset<reg_data> reg = 0,
+   flatbuffers::Offset<conn_data> conn = 0) {
   msg_bodyBuilder builder_(_fbb);
-  builder_.add_nodes(nodes);
-  builder_.add_transfer(transfer);
+  builder_.add_conn(conn);
+  builder_.add_reg(reg);
+  builder_.add_ping(ping);
+  builder_.add_sync(sync);
+  builder_.add_forward(forward);
   return builder_.Finish();
 }
 

@@ -6,33 +6,28 @@ enum CMD:byte {
     CMD_INVALID = 0,
 
     //  数据协议
-    CMD_DATA_TRANSFORM_REQ = 1, 
-    CMD_DATA_TRANSFORM_RSP = 2,
+    CMD_DATA_TRANSFORM_REQ  = 1, 
+    CMD_DATA_TRANSFORM_RSP  = 2,
     
     // 节点控制协议
-    CMD_NODE_SYNC_REQ = 33,
-    CMD_NODE_SYNC_RSP = 34,
-    CMD_NODE_ADD_REQ = 35,
-    CMD_NODE_ADD_RSP = 36,
-    CMD_NODE_MOD_REQ = 37,
-    CMD_NODE_MOD_RSP = 38,
-    CMD_NODE_DEL_REQ = 39,
-    CMD_NODE_DEL_RSP = 40
-
+    CMD_NODE_SYNC_REQ       = 33,
+    CMD_NODE_SYNC_RSP       = 34,
+    CMD_NODE_REG_REQ        = 35,
+    CMD_NODE_REG_RSP        = 36,
+    CMD_NODE_CONN_SYN       = 38,
+    CMD_NODE_PING           = 39,
+    CMD_NODE_PONG           = 40
 }
 
-struct data_transform {
+table forward_data {
+    from: ulong;
+    to: ulong;
+    router: [ulong];
+    content: [byte];
 }
 
-struct channel_data {
-    priority: uint = 0;
-    // shm channel
-    // memory channel
-    // tcp channel
-    // udp channel
-    // unix socket channel
-    // pipe channel
-    // file channel
+table channel_data {
+    address: string;
 }
 
 table node_data {
@@ -42,16 +37,34 @@ table node_data {
     children_id_mask: ubyte = 0; // 默认没有子节点
 
     children: [node_data]; // 子节点集合
-    channels: [channel_data]; // 当前节点绑定的通道
 }
 
 table node_tree {
     nodes: [node_data];
 }
 
+table ping_data {
+    id: ulong;
+    time: long;
+}
+
+table reg_data {
+    id: ulong;
+    pid: int;                   // 进程标识（非同一进程不能使用内存通道）
+    hostname: string;           // 物理机标识（非同一物理机不能使用共享内存通道）
+    channels: [channel_data];
+}
+
+table conn_data {
+    address: channel_data;
+}
+
 table msg_body { 
-    transfer:data_transform (id: 0);
-    nodes: node_tree (id: 1);
+    forward: forward_data;
+    sync: node_tree;
+    ping: ping_data;
+    reg: reg_data;
+    conn: conn_data;
 }  
 
 table msg_head {

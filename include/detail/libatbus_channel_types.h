@@ -67,8 +67,8 @@ namespace atbus {
         struct io_stream_connection;
         struct io_stream_channel;
         typedef void(*io_stream_callback_t)(
-            const io_stream_channel* channel,         // 事件触发的channel
-            const io_stream_connection* connection,   // 事件触发的连接
+            io_stream_channel* channel,         // 事件触发的channel
+            io_stream_connection* connection,   // 事件触发的连接
             int status,                         // libuv传入的转态码
             void*,                              // 额外参数(不同事件不同含义)
             size_t s                            // 额外参数长度
@@ -104,7 +104,7 @@ namespace atbus {
             io_stream_channel*                  channel;
 
             // 事件响应
-            mutable io_stream_callback_evt_t            evt;
+            io_stream_callback_evt_t            evt;
             io_stream_callback_t                        act_disc_cbk;   // 主动关闭连接的回调（为了减少额外分配而采用的缓存策略）
 
             // 数据区域
@@ -150,7 +150,7 @@ namespace atbus {
             conn_pool_t conn_pool;
 
             // 事件响应
-            mutable io_stream_callback_evt_t            evt;
+            io_stream_callback_evt_t            evt;
 
             int error_code; // 记录外部的错误码
             // 统计信息
