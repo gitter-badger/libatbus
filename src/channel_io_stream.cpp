@@ -220,8 +220,7 @@ namespace atbus {
         static void io_stream_on_recv_alloc_fn(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
             io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(handle->data);
             assert(conn_raw_ptr);
-            io_stream_channel* channel = conn_raw_ptr->channel;
-            assert(channel);
+            assert(conn_raw_ptr->channel);
 
             void* data = NULL;
             size_t sread = 0, swrite = 0;
