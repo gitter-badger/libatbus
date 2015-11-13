@@ -132,7 +132,7 @@ namespace util {
              * @brief 判断是否已被析构
              * @return bool
              */
-            static bool iss_instance_destroyed() {
+            static bool is_instance_destroyed() {
                 return wrapper::singleton_wrapper<T>::destroyed_;
             }
         };
