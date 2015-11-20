@@ -67,7 +67,7 @@ namespace atbus {
         }
     }
 
-    node::node(): ev_loop_(NULL), static_buffer_(NULL) {
+    node::node(): state_(state_t::CREATED), ev_loop_(NULL), static_buffer_(NULL) {
         self_.id = 0;
         self_.children_mask = 0;
 
@@ -82,6 +82,7 @@ namespace atbus {
         conf->ev_loop = NULL;
         conf->children_mask = 0;
         conf->loop_times = 128;
+        conf->ttl = 16; // 默认最长8次跳转
 
         conf->first_idle_timeout = ATBUS_MACRO_CONNECTION_CONFIRM_TIMEOUT;
         conf->ping_interval = 60;

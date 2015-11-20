@@ -33,11 +33,23 @@ namespace atbus {
         } flag_t;
 
         typedef struct {
+            enum type {
+                CREATED = 0,
+                INITED,
+                LOST_PARENT,
+                CONNECTING_PARENT,
+                RUNNING,
+                CLOSING,
+            };
+        } state_t;
+
+        typedef struct {
             adapter::loop_t* ev_loop;
             uint32_t children_mask;                     /** 子节点掩码 **/
             std::bitset<flag_t::EN_CONF_MAX> flags;     /** 开关配置 **/
             std::string father_address;                 /** 父节点地址 **/
             int loop_times;                             /** 消息循环次数限制，防止某些通道繁忙把其他通道堵死 **/
+            int ttl;                                    /** 消息转发跳转限制 **/
 
             // ===== 连接配置 =====
             int backlog;
@@ -165,6 +177,7 @@ namespace atbus {
         // ============ 基础信息 ============
         // ID
         node_data_t self_;
+        state_t::type state_;
         // 配置
         conf_t conf_;
 
