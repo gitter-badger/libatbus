@@ -4,6 +4,15 @@
  *        附带c++的部分是为了避免命名空间污染并且c++的跨平台适配更加简单
  */
 
+#ifndef _MSC_VER
+
+#include <sys/types.h>
+#include <unistd.h>
+
+#else
+#pragma comment(lib, "Ws2_32.lib") 
+#endif
+
 #include <cstdio>
 #include <assert.h>
 #include <ctime>
@@ -26,52 +35,9 @@ namespace atbus {
                 delete p;
             }
         };
-
-        /**
-         * @brief 字符串转整数
-         * @param out 输出的整数
-         * @param str 被转换的字符串
-         * @note 性能肯定比sscanf系，和iostream系高。strtol系就不知道了
-         */
-        template<typename T> 
-        void str2int(T& out, const char* str) {
-            out = static_cast<T>(0);
-            if (NULL == str || !(*str)) {
-                return;
-            }
-            
-            if ('0' == str[0] && 'x' == str[1]) { // hex
-                for (size_t i = 2; str[i]; ++ i) {
-                    char c = static_cast<char>(::tolower(str[i]));
-                    if (str[i] >= '0' && str[i] <= '9') {
-                        out <<= 4;
-                        out += str[i] - '0';
-                    } else if (str[i] >= 'a' && str[i] <= 'f') {
-                        out <<= 4;
-                        out += str[i] - 'a' + 10;
-                    } else {
-                        break;
-                    }
-                }
-            } else if ('\\' == str[0]) { // oct
-                for (size_t i = 0; str[i] >= '0' && str[i] < '8'; ++i) {
-                    out <<= 3;
-                    out += str[i] - '0';
-                }
-            } else { // dec
-                for (size_t i = 0; str[i] >= '0' && str[i] <= '9'; ++i) {
-                    out *= 10;
-                    out += str[i] - '0';
-                }
-            }
-        }
     }
 
     node::node(): state_(state_t::CREATED), ev_loop_(NULL), static_buffer_(NULL) {
-        self_.id = 0;
-        self_.children_mask = 0;
-
-        node_father_ = self_;
     }
 
     node::~node() {
@@ -96,15 +62,24 @@ namespace atbus {
         conf->send_buffer_number = 0;
     }
 
+    node::ptr_t node::create() {
+        ptr_t ret = std::make_shared<node>();
+        ret->watcher_ = ret;
+        return ret;
+    }
+
     int node::init(bus_id_t id, const conf_t* conf) {
         reset();
 
-        self_.id = id;
         if (NULL == conf) {
             default_conf(&conf_);
         } else {
             conf_ = *conf;
         }
+
+        self_.init(watcher_, id, conf_.children_mask);
+        node_father_.init(watcher_, 0, 0);
+
         static_buffer_ = detail::buffer_block::malloc(conf_.msg_size + detail::buffer_block::head_size(conf_.msg_size) + 16); // 预留crc32长度和vint长度);
 
         ev_loop_ = NULL;
@@ -135,9 +110,7 @@ namespace atbus {
             static_buffer_ = NULL;
         }
         
-        node_father_.id = 0;
-        node_father_.children_mask = 0;
-
+        node_father_.reset();
         return EN_ATBUS_ERR_SUCCESS;
     }
 
@@ -158,11 +131,14 @@ namespace atbus {
 
         ret += conf_.loop_times - loop_left;
 
-        // TODO 超时点对点通道强行关闭
+        // TODO connection超时下线
+        // TODO 父节点重连
+        // TODO Ping包
+        // TODO 同步协议
         return ret;
     }
 
-    int node::listen(const char* addr_str, bool is_caddr) {
+    int node::listen(const char* addr_str) {
         channel::channel_address_t addr;
         if(false == channel::make_address(addr_str, addr)) {
             return EN_ATBUS_ERR_CHANNEL_ADDR_INVALID;
@@ -226,133 +202,106 @@ namespace atbus {
         return ev_loop_;
     }
 
-    void node::iostream_on_recv_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s) {
+    bool node::is_child_node(bus_id_t id) const {
+        return self_.is_child_node(id);
+    }
 
-        assert(channel && channel->data);
-        node* _this = reinterpret_cast<node*>(channel->data);
+    bool node::is_brother_node(bus_id_t id) const {
+        return self_.is_brother_node(id, node_father_.get_id(), node_father_.get_children_mask());
+    }
 
-        if (status < 0 || NULL == buffer || s <= 0) {
-            _this->on_recv(NULL, status, channel->error_code);
-            return;
+    bool node::is_parent_node(bus_id_t id) const {
+        return self_.is_parent_node(id, node_father_.get_id(), node_father_.get_children_mask());
+    }
+
+    int node::get_pid() {
+        return getpid();
+    }
+
+    static std::string& host_name_buffer() {
+        static std::string server_addr;
+        return server_addr;
+    }
+
+    const std::string& node::get_hostname() {
+        std::string& hn = host_name_buffer();
+        if (!hn.empty()) {
+            return hn;
         }
 
-        // TODO 要特别注意处理一下地址对齐问题对flatbuffer有无影响
-        // 看flatbuffer代码的话，这部分没有设置对齐，应该会有影响
-        const protocol::msg* m = protocol::Getmsg(buffer);
-        _this->on_recv(m, status, channel->error_code);
+        // @see man gethostname
+        char buffer[256] = {0};
+        if(0 == gethostname(buffer, sizeof(buffer))) {
+            hn = buffer;
+        }
+#ifdef _MSC_VER
+        else {
+            if (WSANOTINITIALISED == WSAGetLastError()) {
+                WSADATA wsaData;
+                WORD version = MAKEWORD(2, 0);
+                if(0 == WSAStartup(version, &wsaData) && 0 == gethostname(buffer, sizeof(buffer))) {
+                    hn = buffer;
+                }
+            }
+        }
+#endif
+
+        return hn;
     }
 
-    void node::iostream_on_accepted(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s) {
-        // TODO 连接成功加入点对点传输池
-        // TODO 加入超时检测
-        channel->data = NULL;
+    bool node::set_hostname(const std::string& hn) {
+        std::string& h = host_name_buffer();
+        if (h.empty()) {
+            h = hn;
+            return true;
+        }
+
+        return false;
     }
 
-    void node::iostream_on_connected(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s) {
-        // TODO 连接成功加入点对点传输池
-        // TODO 发送注册协议
-        // TODO 加入超时检测
-        channel->data = NULL;
+    bool node::add_proc_connection(connection::ptr_t conn) {
+        if(!conn || conn->get_address().address.empty() || proc_connections_.end() != proc_connections_.find(conn->get_address().address)) {
+            return false;
+        }
+
+        proc_connections_[conn->get_address().address] = conn;
+        return true;
     }
 
-    void node::iostream_on_disconnected(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s) {  
-        // TODO 移除相关的连接
-        // TODO 移除相关的node信息
+    bool node::remove_proc_connection(connection::ptr_t conn) {
+        if (!conn) {
+            return false;
+        }
+
+        detail::auto_select_map<std::string, connection::ptr_t>::type::iterator iter = proc_connections_.find(conn->get_address().address);
+        if (iter == proc_connections_.end()) {
+            return false;
+        }
+
+        proc_connections_.erase(iter);
+        return true;
     }
 
-    void node::on_recv(const protocol::msg* m, int status, int errcode) {
+    void node::on_recv(connection* conn, const protocol::msg* m, int status, int errcode) {
+        if (status < 0 || errcode < 0) {
+            on_error(NULL, conn, status, errcode);
+        }
+
         // TODO 内部协议处理
         // m->head()->cmd();
         // TODO 消息传递
     }
 
-    int node::shm_proc_fn(node& n, no_stream_channel_t* c, time_t sec, time_t usec) {
-        int ret = 0;
-        size_t left_times = n.conf_.loop_times;
-        while(left_times -- > 0) {
-            size_t recv_len;
-            int res = channel::shm_recv(
-                reinterpret_cast<channel::shm_channel*>(c->channel), 
-                n.static_buffer_->data(), 
-                n.static_buffer_->size(), 
-                &recv_len
-            );
-
-            if (EN_ATBUS_ERR_NO_DATA == res) {
-                break;
-            }
-
-            // 回调收到数据事件
-            if(res < 0) {
-                ret = res;
-                n.on_recv(NULL, res, res);
-                break;
-            } else {
-                const protocol::msg* m = protocol::Getmsg(n.static_buffer_->data());
-                n.on_recv(m, res, res);
-                ++ret;
-            }
+    int node::on_error(const endpoint* ep, const connection* conn, int status, int errcode) {
+        if (NULL == ep && NULL != conn) {
+            ep = conn->get_binding();
         }
 
-        return ret;
-    }
-
-    int node::shm_free_fn(node& n, no_stream_channel_t* c) {
-        return channel::shm_close(c->key);
-    }
-
-    int node::mem_proc_fn(node& n, no_stream_channel_t* c, time_t sec, time_t usec) {
-        int ret = 0;
-        size_t left_times = n.conf_.loop_times;
-        while (left_times-- > 0) {
-            size_t recv_len;
-            int res = channel::mem_recv(
-                reinterpret_cast<channel::mem_channel*>(c->channel),
-                n.static_buffer_->data(),
-                n.static_buffer_->size(),
-                &recv_len
-            );
-
-            if (EN_ATBUS_ERR_NO_DATA == res) {
-                break;
-            }
-
-            // 回调收到数据事件
-            if (res < 0) {
-                ret = res;
-                n.on_recv(NULL, res, res);
-                break;
-            } else {
-                const protocol::msg* m = protocol::Getmsg(n.static_buffer_->data());
-                n.on_recv(m, res, res);
-                ++ret;
-            }
+        if (events_.on_error) {
+            events_.on_error(*this, ep, conn, status, errcode);
         }
 
-        return ret;
-    }
-
-    int node::mem_free_fn(node& n, no_stream_channel_t* c) {
-        // 什么都不用干，反正内存也不是这里分配的
-        return 0;
-    }
-
-    bool node::is_child_node(bus_id_t id) {
-        // 目前id是整数，直接位运算即可
-        bus_id_t mask = ~((1 << conf_.children_mask) - 1);
-        return (id & mask) == (self_.id & mask);
-    }
-
-    bool node::is_brother_node(bus_id_t id) {
-        // 目前id是整数，直接位运算即可
-        bus_id_t c_mask = ~((1 << conf_.children_mask) - 1);
-        bus_id_t f_mask = ~((1 << node_father_.children_mask) - 1);
-        // 同一父节点下，且子节点域不同
-        return (id & c_mask) != (self_.id & c_mask) && (id & f_mask) == (self_.id & f_mask);
-    }
-
-    bool node::is_parent_node(bus_id_t id) {
-        return id == node_father_.id;
+        return status;
     }
 
     channel::io_stream_channel* node::get_iostream_channel() {
@@ -365,10 +314,10 @@ namespace atbus {
         iostream_channel_->data = this;
 
         // callbacks
-        iostream_channel_->evt.callbacks[channel::io_stream_callback_evt_t::EN_FN_ACCEPTED] = iostream_on_accepted;
-        iostream_channel_->evt.callbacks[channel::io_stream_callback_evt_t::EN_FN_CONNECTED] = iostream_on_connected;
-        iostream_channel_->evt.callbacks[channel::io_stream_callback_evt_t::EN_FN_DISCONNECTED] = iostream_on_disconnected;
-        iostream_channel_->evt.callbacks[channel::io_stream_callback_evt_t::EN_FN_RECVED] = iostream_on_recv_cb;
+        iostream_channel_->evt.callbacks[channel::io_stream_callback_evt_t::EN_FN_ACCEPTED] = connection::iostream_on_accepted;
+        iostream_channel_->evt.callbacks[channel::io_stream_callback_evt_t::EN_FN_CONNECTED] = connection::iostream_on_connected;
+        iostream_channel_->evt.callbacks[channel::io_stream_callback_evt_t::EN_FN_DISCONNECTED] = connection::iostream_on_disconnected;
+        iostream_channel_->evt.callbacks[channel::io_stream_callback_evt_t::EN_FN_RECVED] = connection::iostream_on_recv_cb;
 
         return iostream_channel_.get();
     }

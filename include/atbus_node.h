@@ -15,15 +15,24 @@
 #include <list>
 
 #include "std/smart_ptr.h"
+#include "std/functional.h"
 #include "design_pattern/noncopyable.h"
 
 #include "detail/libatbus_error.h"
 #include "detail/libatbus_config.h"
 #include "detail/libatbus_channel_export.h"
 
+#include "atbus_endpoint.h"
+
+namespace protocol {
+    struct msg;
+}
+
 namespace atbus {
     class node: public util::design_pattern::noncopyable {
     public:
+        typedef std::shared_ptr<node> ptr_t;
+
         typedef ATBUS_MACRO_BUSID_TYPE bus_id_t;
         typedef struct {
             enum type {
@@ -73,17 +82,15 @@ namespace atbus {
             int(*free_fn)(node&, no_stream_channel_t*);
         };
 
-        /** 简要节点信息 **/
-        struct node_data_t {
-            bus_id_t id;
-            uint32_t children_mask;
-        };
-
     public:
         static void default_conf(conf_t* conf);
 
-    public:
+    private:
         node();
+        ptr_t create();
+
+    public:
+
         ~node();
 
         /**
@@ -118,7 +125,7 @@ namespace atbus {
          * @param is_caddr 是否是控制节点
          * @return 0或错误码
          */
-        int listen(const char* addr, bool is_caddr);
+        int listen(const char* addr);
 
         /**
          * @brief 连接到目标地址
@@ -152,51 +159,60 @@ namespace atbus {
         channel::io_stream_channel* get_iostream_channel();
         channel::io_stream_conf* get_iostream_conf();
 
-        static void iostream_on_recv_cb(channel::io_stream_channel* channel,channel::io_stream_connection* connection,int status,void* buffer,size_t s);
-        static void iostream_on_accepted(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
-        static void iostream_on_connected(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
-        static void iostream_on_disconnected(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
-
-        void on_recv(const protocol::msg* m, int status, int errcode);
-
-        static int shm_proc_fn(node& n, no_stream_channel_t* c, time_t sec, time_t usec);
-
-        static int shm_free_fn(node& n, no_stream_channel_t* c);
-
-        static int mem_proc_fn(node& n, no_stream_channel_t* c, time_t sec, time_t usec);
-
-        static int mem_free_fn(node& n, no_stream_channel_t* c);
-
     public:
-        inline bus_id_t get_id() const { return self_.id; }
+        inline bus_id_t get_id() const { return self_.get_id(); }
+        inline const conf_t& get_conf() const { return conf_; }
 
-        bool is_child_node(bus_id_t id);
-        bool is_brother_node(bus_id_t id);
-        bool is_parent_node(bus_id_t id);
+        bool is_child_node(bus_id_t id) const;
+        bool is_brother_node(bus_id_t id) const;
+        bool is_parent_node(bus_id_t id) const;
+
+        static int get_pid();
+        static const std::string& get_hostname();
+        static bool set_hostname(const std::string& hn);
+
+        bool add_proc_connection(connection::ptr_t conn);
+        bool remove_proc_connection(connection::ptr_t conn);
+
+        void on_recv(connection* conn, const protocol::msg* m, int status, int errcode);
+        int on_error(const endpoint*, const connection*, int, int);
+
+        inline const detail::buffer_block* get_temp_static_buffer() const { return static_buffer_; }
+        inline detail::buffer_block* get_temp_static_buffer() { return static_buffer_; }
     private:
         // ============ 基础信息 ============
         // ID
-        node_data_t self_;
+        endpoint self_;
         state_t::type state_;
         // 配置
         conf_t conf_;
+        std::weak_ptr<node> watcher_; // just like std::shared_from_this<T>
 
         // ============ IO事件数据 ============
         // 事件分发器
         adapter::loop_t* ev_loop_;
         std::shared_ptr<channel::io_stream_channel> iostream_channel_;
         std::unique_ptr<channel::io_stream_conf> iostream_conf_;
+        typedef struct {
+            std::function<int(const node&, const endpoint&, const connection&, int, const void*, size_t)> on_recv_msg;
+            std::function<int(const node&, const endpoint*, const connection*, int, int)> on_error;
+            std::function<int(const node&, int)> on_reg;
+            std::function<int(const node&, const endpoint*, int)> on_node_down;
+            std::function<int(const node&, const endpoint*, int)> on_node_up;
+            std::function<int(const node&, int)> on_invalid_connection;
+        } evt_t;
+        evt_t events_;
 
         // 轮训接收通道集
         detail::buffer_block* static_buffer_;
-        std::list<no_stream_channel_t> basic_channels;
+        detail::auto_select_map<std::string, connection::ptr_t>::type proc_connections_;
 
         // 基于事件的通道信息
         // 基于事件的通道超时收集
 
         // ============ 节点逻辑关系数据 ============
         // 父节点
-        node_data_t node_father_;
+        endpoint node_father_;
 
         // 兄弟节点
 
