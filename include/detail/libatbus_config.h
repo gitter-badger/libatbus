@@ -26,18 +26,6 @@
 #define ATBUS_MACRO_DATA_SMALL_SIZE 512
 #endif
 
-#ifdef _MSC_VER
-#define ATBUS_FUNC_STRCASE_CMP(l, r) _stricmp(l, r)
-#define ATBUS_FUNC_STRNCASE_CMP(l, r, s) _strnicmp(l, r, s)
-#define ATBUS_FUNC_SSCANF(...) sscanf_s(__VA_ARGS__)
-#define ATBUS_FUNC_SNPRINTF(...) sprintf_s(__VA_ARGS__)
-#else
-#define ATBUS_FUNC_STRCASE_CMP(l, r) strcasecmp(l, r)
-#define ATBUS_FUNC_STRNCASE_CMP(l, r, s) strncasecmp(l, r, s)
-#define ATBUS_FUNC_SSCANF(...) sscanf(__VA_ARGS__)
-#define ATBUS_FUNC_SNPRINTF(...) snprintf(__VA_ARGS__)
-#endif
-
 #if defined(__cplusplus) && (__cplusplus >= 201103L || \
         (defined(_MSC_VER) && (_MSC_VER == 1500 && defined (_HAS_TR1)) || (_MSC_VER > 1500 && defined(_HAS_CPP0X) && _HAS_CPP0X)) || \
         (defined(__GNUC__) && defined(__GXX_EXPERIMENTAL_CXX0X__)) \

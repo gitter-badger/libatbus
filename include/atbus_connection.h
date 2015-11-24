@@ -35,6 +35,7 @@ namespace atbus {
                 CONNECTING,         /** 正在连接 **/
                 HANDSHAKING,        /** 正在握手 **/
                 CONNECTED,          /** 已连接 **/
+                DISCONNECTING,      /** 正在断开连接 **/
             };
         } state_t;
 
@@ -50,7 +51,7 @@ namespace atbus {
         connection();
 
     public:
-        ptr_t create(std::weak_ptr<node> owner);
+        static ptr_t create(std::weak_ptr<node> owner);
 
         ~connection();
 
@@ -62,7 +63,7 @@ namespace atbus {
          * @param sec 当前时间-微秒
          * @return 本帧处理的消息数
          */
-        int proc(time_t sec, time_t usec);
+        int proc(node& n, time_t sec, time_t usec);
 
         /**
          * @brief 监听数据接收地址
@@ -70,7 +71,7 @@ namespace atbus {
          * @param is_caddr 是否是控制节点
          * @return 0或错误码
          */
-        int listen(const char* addr, bool is_caddr);
+        int listen(const char* addr);
 
         /**
          * @brief 连接到目标地址
@@ -89,14 +90,13 @@ namespace atbus {
 
         /**
          * @brief 监听数据接收地址
-         * @param type 自定义类型，将作为msg.head.type字段传递。可用于业务区分服务类型
          * @param buffer 数据块地址
          * @param s 数据块长度
          * @return 0或错误码
          * @note 接收端收到的数据很可能不是地址对齐的，所以这里不建议发送内存数据
          *       如果非要发送内存数据的话，一定要memcpy，不能直接类型转换，除非手动设置了地址对齐规则
          */
-        int push(int type, const void* buffer, size_t s);
+        int push(const void* buffer, size_t s);
 
         /**
          * @brief 获取连接的地址
@@ -118,6 +118,9 @@ namespace atbus {
          */
         const endpoint* get_binding() const;
     public:
+        static void iostream_on_listen_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
+        static void iostream_on_connected_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
+
         static void iostream_on_recv_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
         static void iostream_on_accepted(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
         static void iostream_on_connected(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
@@ -127,9 +130,17 @@ namespace atbus {
 
         static int shm_free_fn(node& n, connection& conn);
 
+        static int shm_push_fn(connection& conn, const void* buffer, size_t s);
+
         static int mem_proc_fn(node& n, connection& conn, time_t sec, time_t usec);
 
         static int mem_free_fn(node& n, connection& conn);
+
+        static int mem_push_fn(connection& conn, const void* buffer, size_t s);
+
+        static int ios_free_fn(node& n, connection& conn);
+
+        static int ios_push_fn(connection& conn, const void* buffer, size_t s);
 
     private:
         state_t::type state_;
@@ -138,6 +149,7 @@ namespace atbus {
 
         std::weak_ptr<node> owner_;
         std::weak_ptr<endpoint> binding_;
+        std::weak_ptr<connection> watcher_;
 
         typedef struct {
             channel::mem_channel* channel;
@@ -156,10 +168,20 @@ namespace atbus {
             channel::io_stream_connection* conn;
         } conn_data_ios;
 
-        typedef union {
-            conn_data_mem mem;
-            conn_data_shm shm;
-            conn_data_ios ios_fd;
+        typedef struct {
+            typedef union {
+                conn_data_mem mem;
+                conn_data_shm shm;
+                conn_data_ios ios_fd;
+            } shared_t;
+            typedef int (*proc_fn_t)(node& n, connection& conn, time_t sec, time_t usec);
+            typedef int(*free_fn_t)(node& n, connection& conn);
+            typedef int(*push_fn_t)(connection& conn, const void* buffer, size_t s);
+
+            shared_t shared;
+            proc_fn_t proc_fn;
+            free_fn_t free_fn;
+            push_fn_t push_fn;
         } connection_data_t;
         connection_data_t conn_data_;
     };

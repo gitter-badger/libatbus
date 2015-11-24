@@ -24,16 +24,24 @@
 #include <cstring>
 #include <algorithm>
 
-#ifdef _MSC_VER
-#define ATBUS_FUNC_STRCASE_CMP(l, r) _stricmp(l, r)
-#define ATBUS_FUNC_STRNCASE_CMP(l, r, s) _strnicmp(l, r, s)
-#define ATBUS_FUNC_SSCANF(...) sscanf_s(__VA_ARGS__)
-#define ATBUS_FUNC_SNPRINTF(...) sprintf_s(__VA_ARGS__)
+#if defined(_MSC_VER) && _MSC_VER >= 1600
+#define UTIL_STRFUNC_STRCASE_CMP(l, r) _stricmp(l, r)
+#define UTIL_STRFUNC_STRNCASE_CMP(l, r, s) _strnicmp(l, r, s)
+#define UTIL_STRFUNC_STRCMP(l, r) strcmp(l, r)
+#define UTIL_STRFUNC_STRNCMP(l, r, s) strncmp(l, r, s)
 #else
-#define ATBUS_FUNC_STRCASE_CMP(l, r) strcasecmp(l, r)
-#define ATBUS_FUNC_STRNCASE_CMP(l, r, s) strncasecmp(l, r, s)
-#define ATBUS_FUNC_SSCANF(...) sscanf(__VA_ARGS__)
-#define ATBUS_FUNC_SNPRINTF(...) snprintf(__VA_ARGS__)
+#define UTIL_STRFUNC_STRCASE_CMP(l, r) strcasecmp(l, r)
+#define UTIL_STRFUNC_STRNCASE_CMP(l, r, s) strncasecmp(l, r, s)
+#define UTIL_STRFUNC_STRCMP(l, r) strcmp(l, r)
+#define UTIL_STRFUNC_STRNCMP(l, r, s) strncmp(l, r, s)
+#endif
+
+#if (defined(_MSC_VER) && _MSC_VER >= 1600)  || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+#define UTIL_STRFUNC_SSCANF(...) sscanf_s(__VA_ARGS__)
+#define UTIL_STRFUNC_SNPRINTF(...) sprintf_s(__VA_ARGS__)
+#else
+#define UTIL_STRFUNC_SSCANF(...) sscanf(__VA_ARGS__)
+#define UTIL_STRFUNC_SNPRINTF(...) snprintf(__VA_ARGS__)
 #endif
 
 namespace util {

@@ -97,7 +97,6 @@ namespace atbus {
                 EN_ST_CREATED = 0,
                 EN_ST_CONNECTING,
                 EN_ST_CONNECTED,
-                EN_ST_CONFIRMED,
                 EN_ST_DISCONNECTIED
             } status_t;
             status_t                            status;                 // 状态

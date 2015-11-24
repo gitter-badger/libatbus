@@ -14,6 +14,8 @@
 #include <atomic>
 #include <map>
 
+#include "common/string_oprs.h"
+
 #include "detail/libatbus_error.h"
 
 #include "detail/libatbus_channel_export.h"
@@ -112,7 +114,7 @@ namespace atbus {
             size_t page_size = static_cast<std::size_t>(si.dwPageSize);
 
             char shm_file_name[64] = {0};
-            ATBUS_FUNC_SNPRINTF(shm_file_name, sizeof(shm_file_name), "libatbus_win_shm_%ld.bus", shm_key);
+            UTIL_STRFUNC_SNPRINTF(shm_file_name, sizeof(shm_file_name), "libatbus_win_shm_%ld.bus", shm_key);
 
             // 首先尝试直接打开
             shm_record.handle = OpenFileMapping(

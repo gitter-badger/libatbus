@@ -154,14 +154,17 @@ namespace atbus {
          */
         //int send_to(bus_id_t tid, int type, const void* buffer, size_t s);
 
+    public:
+        channel::io_stream_channel* get_iostream_channel();
+
     private:
         adapter::loop_t* get_evloop(); 
-        channel::io_stream_channel* get_iostream_channel();
         channel::io_stream_conf* get_iostream_conf();
 
     public:
         inline bus_id_t get_id() const { return self_.get_id(); }
         inline const conf_t& get_conf() const { return conf_; }
+        ptr_t get_watcher();
 
         bool is_child_node(bus_id_t id) const;
         bool is_brother_node(bus_id_t id) const;
@@ -174,8 +177,12 @@ namespace atbus {
         bool add_proc_connection(connection::ptr_t conn);
         bool remove_proc_connection(connection::ptr_t conn);
 
+        bool add_connection_timer(connection::ptr_t conn);
+
         void on_recv(connection* conn, const protocol::msg* m, int status, int errcode);
         int on_error(const endpoint*, const connection*, int, int);
+        int on_disconnect(const connection*);
+        int on_new_connection(connection*);
 
         inline const detail::buffer_block* get_temp_static_buffer() const { return static_buffer_; }
         inline detail::buffer_block* get_temp_static_buffer() { return static_buffer_; }

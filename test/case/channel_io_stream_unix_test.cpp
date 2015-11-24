@@ -117,10 +117,10 @@ static void setup_channel(atbus::channel::io_stream_channel& channel, const char
     int res = 0;
     if (NULL != listen) {
         atbus::channel::make_address(listen, addr);
-        res = atbus::channel::io_stream_listen(&channel, addr, listen_callback_test_fn);
+        res = atbus::channel::io_stream_listen(&channel, addr, listen_callback_test_fn, NULL, 0);
     } else {
         atbus::channel::make_address(conn, addr);
-        res = atbus::channel::io_stream_connect(&channel, addr, connected_callback_test_fn);
+        res = atbus::channel::io_stream_connect(&channel, addr, connected_callback_test_fn, NULL, 0);
     }
 
     if (0 != res) {
@@ -470,7 +470,7 @@ CASE_TEST(channel, io_stream_unix_connect_failed)
 
     // assume port 16388 is unreachable
     atbus::channel::make_address(UNIT_TEST_INVALID_ADDR, addr);
-    int res = atbus::channel::io_stream_connect(&cli, addr, connect_failed_callback_test_fn);
+    int res = atbus::channel::io_stream_connect(&cli, addr, connect_failed_callback_test_fn, NULL, 0);
     CASE_EXPECT_EQ(0, res);
 
     while (g_check_flag - check_flag < 1) {

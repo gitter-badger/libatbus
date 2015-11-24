@@ -6,6 +6,8 @@
 
 #include <cstdio>
 
+#include "common/string_oprs.h"
+
 #include "detail/libatbus_channel_export.h"
 
 namespace atbus {
@@ -23,7 +25,7 @@ namespace atbus {
             size_t port_end = addr.address.find_last_of(":");
             addr.port = 0;
             if (addr.address.npos != port_end && port_end >= scheme_end + 3) {
-                ATBUS_FUNC_SSCANF(addr.address.c_str() + port_end + 1, "%d", &addr.port);
+                UTIL_STRFUNC_SSCANF(addr.address.c_str() + port_end + 1, "%d", &addr.port);
             }
 
             // 截取域名
@@ -41,7 +43,7 @@ namespace atbus {
             
             if(port > 0) {
                 char port_str[16] = { 0 };
-                ATBUS_FUNC_SNPRINTF(port_str, sizeof(port_str), "%d", port);
+                UTIL_STRFUNC_SNPRINTF(port_str, sizeof(port_str), "%d", port);
                 addr.address += ":";
                 addr.address += &port_str[0];
             }

@@ -18,6 +18,8 @@
 #include <utility>
 #include <numeric>
 
+#include "common/string_oprs.h"
+
 #include "detail/libatbus_error.h"
 #include "detail/libatbus_config.h"
 #include "detail/crc32.h"
@@ -333,7 +335,7 @@ namespace atbus {
             if (channel)
                 *channel = &head->channel;
 
-            if(0 != ATBUS_FUNC_STRCASE_CMP(MEM_CHANNEL_NAME, head->channel.node_magic)) {
+            if(0 != UTIL_STRFUNC_STRCASE_CMP(MEM_CHANNEL_NAME, head->channel.node_magic)) {
                 return EN_ATBUS_ERR_CHANNEL_BUFFER_INVALID;
             }
 
@@ -733,7 +735,7 @@ namespace atbus {
                     unsigned char* data_c = (unsigned char*)data_ptr;
                     char data_buf[4] = {0};
                     for (size_t j = 0; data_c && j < data_len && j < need_node_data; ++ j) {
-                        ATBUS_FUNC_SNPRINTF(data_buf, sizeof(data_buf), "%02x", data_c[j]);
+                        UTIL_STRFUNC_SNPRINTF(data_buf, sizeof(data_buf), "%02x", data_c[j]);
                         out<< data_buf;
                     }
                     out<<std::endl;

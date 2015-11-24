@@ -159,7 +159,7 @@ int main(int argc, char* argv[])
     channel_address_t addr;
     make_address(argv[1], addr);
 
-    if(io_stream_connect(&channel, addr, connect_callback) < 0) {
+    if(io_stream_connect(&channel, addr, connect_callback, NULL, 0) < 0) {
         std::cerr << "connect to " << argv[1] << " failed." << uv_err_name(channel.error_code) << ":" << uv_strerror(channel.error_code) << std::endl;
         io_stream_close(&channel);
         delete[] conf.buff_pool;

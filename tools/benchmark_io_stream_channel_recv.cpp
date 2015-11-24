@@ -152,7 +152,7 @@ int main(int argc, char* argv[])
     channel_address_t addr;
     make_address(argv[1], addr);
 
-    if(io_stream_listen(&channel, addr, NULL) < 0) {
+    if(io_stream_listen(&channel, addr, NULL, NULL, 0) < 0) {
         std::cerr << "listen to " << argv[1] << " failed." << uv_err_name(channel.error_code) << ":" << uv_strerror(channel.error_code) << std::endl;
         io_stream_close(&channel);
         return -1;

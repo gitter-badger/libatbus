@@ -57,9 +57,11 @@ namespace atbus {
 
         extern int io_stream_run(io_stream_channel* channel, adapter::run_mode_t mode = adapter::RUN_NOWAIT);
 
-        extern int io_stream_listen(io_stream_channel* channel, const channel_address_t& addr, io_stream_callback_t callback);
+        extern int io_stream_listen(io_stream_channel* channel, const channel_address_t& addr, 
+            io_stream_callback_t callback, void* priv_data, size_t priv_size);
 
-        extern int io_stream_connect(io_stream_channel* channel, const channel_address_t& addr, io_stream_callback_t callback);
+        extern int io_stream_connect(io_stream_channel* channel, const channel_address_t& addr, 
+            io_stream_callback_t callback, void* priv_data, size_t priv_size);
 
         extern int io_stream_disconnect(io_stream_channel* channel, io_stream_connection* connection, io_stream_callback_t callback);
         extern int io_stream_disconnect_fd(io_stream_channel* channel, adapter::fd_t fd, io_stream_callback_t callback);

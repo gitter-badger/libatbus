@@ -6,6 +6,7 @@
 #include <memory>
 #include <cstdio>
 #include "common/file_system.h"
+#include "common/compiler_message.h"
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -39,9 +40,11 @@ namespace util {
     bool file_system::get_file_content(std::string& out, const char* file_path, bool is_binary) {
         FILE* f = NULL;
         if(is_binary) {
-            f = fopen(file_path, "rb");
+            UTIL_FS_OPEN(error_code, f, file_path, "rb");
+            COMPILER_UNUSED(error_code);
         } else {
-            f = fopen(file_path, "r");
+            UTIL_FS_OPEN(error_code, f, file_path, "r");
+            COMPILER_UNUSED(error_code);
         }
 
         if (NULL == f) {
@@ -66,7 +69,12 @@ namespace util {
         }
 
         char opr_path[MAX_PATH_LEN];
+
+#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+        strncpy_s(opr_path, sizeof(opr_path), path, strlen(path));
+#else
         strncpy(opr_path, path, sizeof(opr_path));
+#endif
 
         char* saveptr = NULL;
         char* token = SAFE_STRTOK_S(opr_path, "\\/", &saveptr);
@@ -183,11 +191,29 @@ namespace util {
     }
 
     FILE* file_system::open_tmp_file() {
-        return tmpfile();
+#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+        FILE* ret = NULL;
+        if (0 == tmpfile_s(&ret)) {
+            return ret;
+        }
+
+        return NULL;
+#else
+        return tmpfile(NULL);
+#endif
     }
 
     std::string file_system::generate_tmp_file_path() {
+#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+        char buffer[MAX_PATH_LEN] = {0};
+        if(0 == tmpnam_s(buffer, MAX_PATH_LEN)) {
+            return buffer;
+        }
+
+        return std::string();
+#else
         return tmpnam(NULL);
+#endif
     }
 
     int file_system::scan_dir(const char* dir_path, std::list<std::string>& out, int options) {

@@ -63,7 +63,7 @@ namespace atbus {
     }
 
     node::ptr_t node::create() {
-        ptr_t ret = std::make_shared<node>();
+        ptr_t ret(new node());
         ret->watcher_ = ret;
         return ret;
     }
@@ -98,6 +98,11 @@ namespace atbus {
     }
 
     int node::reset() {
+        // TODO 所有连接断开
+
+        // TODO 销毁endpoint
+
+        // 基础数据
         iostream_channel_.reset();
         iostream_conf_.reset();
 
@@ -118,8 +123,8 @@ namespace atbus {
         int ret = 0;
         // TODO 以后可以优化成event_fd通知，这样就不需要轮询了
         // 点对点IO流通道
-        for (std::list<no_stream_channel_t>::iterator iter = basic_channels.begin(); iter != basic_channels.end(); ++ iter) {
-            ret += iter->proc_fn(*this, &(*iter), sec, usec);
+        for (detail::auto_select_map<std::string, connection::ptr_t>::type::iterator iter = proc_connections_.begin(); iter != proc_connections_.end(); ++ iter) {
+            ret += iter->second->proc(*this, sec, usec);
         }
 
         // 点对点IO流通道
@@ -139,57 +144,17 @@ namespace atbus {
     }
 
     int node::listen(const char* addr_str) {
-        channel::channel_address_t addr;
-        if(false == channel::make_address(addr_str, addr)) {
-            return EN_ATBUS_ERR_CHANNEL_ADDR_INVALID;
+        connection::ptr_t conn = connection::create(watcher_);
+        if(!conn) {
+            return EN_ATBUS_ERR_MALLOC;
         }
 
-        if(0 == ATBUS_FUNC_STRNCASE_CMP("mem", addr.scheme.c_str(), 3)) {
-            channel::mem_channel* mem_chann;
-            intptr_t ad;
-            detail::str2int(ad, addr.host.c_str());
-            int res = channel::mem_attach(reinterpret_cast<void*>(ad), conf_.recv_buffer_size, &mem_chann, NULL);
-            if (res < 0) {
-                res = channel::mem_init(reinterpret_cast<void*>(ad), conf_.recv_buffer_size, &mem_chann, NULL);
-            }
-
-            if (res < 0) {
-                return res;
-            }
-
-            // 加入轮询队列
-            no_stream_channel_t channel;
-            channel.channel = mem_chann;
-            channel.key = static_cast<key_t>(ad);
-            channel.proc_fn = mem_proc_fn;
-            channel.free_fn = mem_free_fn;
-            basic_channels.push_back(channel);
-            return res;
-        } else if (0 == ATBUS_FUNC_STRNCASE_CMP("shm", addr.scheme.c_str(), 3)) {
-            channel::shm_channel* shm_chann;
-            key_t shm_key;
-            detail::str2int(shm_key, addr.host.c_str());
-            int res = channel::shm_attach(shm_key, conf_.recv_buffer_size, &shm_chann, NULL);
-            if (res < 0) {
-                res = channel::shm_init(shm_key, conf_.recv_buffer_size, &shm_chann, NULL);
-            }
-
-            if (res < 0) {
-                return res;
-            }
-
-            // 加入轮询队列
-            no_stream_channel_t channel;
-            channel.channel = shm_chann;
-            channel.key = shm_key;
-            channel.proc_fn = shm_proc_fn;
-            channel.free_fn = shm_free_fn;
-            basic_channels.push_back(channel);
-            return res;
-        } else {
-            return channel::io_stream_listen(get_iostream_channel(), addr, NULL);
+        int ret = conn->listen(addr_str);
+        if (ret < 0) {
+            return ret;
         }
 
+        // TODO 添加到self_里
         return EN_ATBUS_ERR_SUCCESS;
     }
 
@@ -282,6 +247,12 @@ namespace atbus {
         return true;
     }
 
+    bool node::add_connection_timer(connection::ptr_t conn) {
+        // TODO 是否是正在连接状态
+        // TODO 是否在正在连接池中？
+        return true;
+    }
+
     void node::on_recv(connection* conn, const protocol::msg* m, int status, int errcode) {
         if (status < 0 || errcode < 0) {
             on_error(NULL, conn, status, errcode);
@@ -304,6 +275,26 @@ namespace atbus {
         return status;
     }
 
+    int node::on_disconnect(const connection* conn) {
+        if (NULL == conn) {
+            return EN_ATBUS_ERR_PARAMS;
+        }
+        
+        // TODO 断线逻辑
+
+        return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    int node::on_new_connection(connection* conn) {
+        if (NULL == conn) {
+            return EN_ATBUS_ERR_PARAMS;
+        }
+
+        // TODO 如果处于握手阶段，发送节点关系逻辑并加入握手连接池并加入超时判定池
+
+        return EN_ATBUS_ERR_SUCCESS;
+    }
+
     channel::io_stream_channel* node::get_iostream_channel() {
         if(iostream_channel_) {
             return iostream_channel_.get();
@@ -320,6 +311,10 @@ namespace atbus {
         iostream_channel_->evt.callbacks[channel::io_stream_callback_evt_t::EN_FN_RECVED] = connection::iostream_on_recv_cb;
 
         return iostream_channel_.get();
+    }
+
+    node::ptr_t node::get_watcher() {
+        return watcher_.lock();
     }
 
     channel::io_stream_conf* node::get_iostream_conf() {

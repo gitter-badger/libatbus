@@ -78,4 +78,6 @@
 
 #endif
 
+#define COMPILER_UNUSED(x) ((void)(x))  /* to avoid warnings */
+
 #endif /* _UTIL_COMMON_COMPILER_MESSAGE_H_ */

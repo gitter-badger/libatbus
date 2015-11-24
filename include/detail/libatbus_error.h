@@ -16,6 +16,7 @@ typedef enum {
     EN_ATBUS_ERR_INVALID_SIZE               = -8,   // 数据大小异常
     EN_ATBUS_ERR_NOT_INITED                 = -9,   // 未初始化
     EN_ATBUS_ERR_ALREADY_INITED             = -10,  // 已填充初始数据
+    EN_ATBUS_ERR_ACCESS_DENY                = -11,  // 不允许的操作
 
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
     EN_ATBUS_ERR_CHANNEL_BUFFER_INVALID     = -102, // 缓冲区错误（已被其他模块使用或检测冲突）
