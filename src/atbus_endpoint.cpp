@@ -43,8 +43,6 @@ namespace atbus {
         id_ = 0;
         children_mask_ = 0;
 
-        // TODO 从owner移除
-
         // 只要endpoint存在，则它一定存在于owner_的某个位置。
         // 并且这个值只能在创建时指定，所以不能重置这个值
     }
@@ -87,6 +85,7 @@ namespace atbus {
         }
 
         conn->binding_ = this;
+        return true;
     }
 
     bool endpoint::remove_connection(connection* conn) {
