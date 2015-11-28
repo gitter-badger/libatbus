@@ -10,7 +10,7 @@
 #ifndef LIBATBUS_ENDPOINT_H_
 #define LIBATBUS_ENDPOINT_H_
 
-#include <string>
+#include <list>
 
 #include "std/smart_ptr.h"
 #include "design_pattern/noncopyable.h"
@@ -39,11 +39,14 @@ namespace atbus {
     class endpoint: public util::design_pattern::noncopyable {
     public:
         typedef ATBUS_MACRO_BUSID_TYPE bus_id_t;
+        typedef std::shared_ptr<endpoint> ptr_t;
 
+    private:
         endpoint();
-        ~endpoint();
 
-        int init(std::weak_ptr<node> owner, bus_id_t id, uint32_t children_mask);
+    public:
+        static ptr_t create(node* owner, bus_id_t id, uint32_t children_mask);
+        ~endpoint();
 
         void reset();
 
@@ -52,11 +55,21 @@ namespace atbus {
 
         bool is_child_node(bus_id_t id) const;
         bool is_brother_node(bus_id_t id, bus_id_t father_id, uint32_t father_mask) const;
-        bool is_parent_node(bus_id_t id, bus_id_t father_id, uint32_t father_mask) const;
+        static bool is_parent_node(bus_id_t id, bus_id_t father_id, uint32_t father_mask);
+
+        bool add_connection(connection* conn, bool force_data);
+
+        bool remove_connection(connection* conn);
     private:
         bus_id_t id_;
         uint32_t children_mask_;
-        std::weak_ptr<node> owner_;
+
+        // 这里不用智能指针是为了该值在上层对象（node）析构时仍然可用
+        node* owner_;
+        std::weak_ptr<endpoint> watcher_;
+
+        connection::ptr_t ctrl_conn_;
+        std::list<connection::ptr_t> data_conn_;
     };
 }
 

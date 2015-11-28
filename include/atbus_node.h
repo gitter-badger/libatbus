@@ -37,6 +37,7 @@ namespace atbus {
         typedef struct {
             enum type {
                 EN_CONF_GLOBAL_ROUTER,                  /** 全局路由表 **/
+                RESETTING,                              /** 正在重置 **/
                 EN_CONF_MAX
             };
         } flag_t;
@@ -87,7 +88,7 @@ namespace atbus {
 
     private:
         node();
-        ptr_t create();
+        static ptr_t create();
 
     public:
 
@@ -162,7 +163,7 @@ namespace atbus {
         channel::io_stream_conf* get_iostream_conf();
 
     public:
-        inline bus_id_t get_id() const { return self_.get_id(); }
+        inline bus_id_t get_id() const { return self_->get_id(); }
         inline const conf_t& get_conf() const { return conf_; }
         ptr_t get_watcher();
 
@@ -175,7 +176,7 @@ namespace atbus {
         static bool set_hostname(const std::string& hn);
 
         bool add_proc_connection(connection::ptr_t conn);
-        bool remove_proc_connection(connection::ptr_t conn);
+        bool remove_proc_connection(const std::string& conn_key);
 
         bool add_connection_timer(connection::ptr_t conn);
 
@@ -189,7 +190,7 @@ namespace atbus {
     private:
         // ============ 基础信息 ============
         // ID
-        endpoint self_;
+        endpoint::ptr_t self_;
         state_t::type state_;
         // 配置
         conf_t conf_;
@@ -219,7 +220,7 @@ namespace atbus {
 
         // ============ 节点逻辑关系数据 ============
         // 父节点
-        endpoint node_father_;
+        endpoint::ptr_t node_father_;
 
         // 兄弟节点
 

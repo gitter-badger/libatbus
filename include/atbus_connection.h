@@ -43,6 +43,7 @@ namespace atbus {
             enum type {
                 REG_PROC = 0,       /** 注册了proc记录到node，清理的时候需要移除 **/
                 REG_FD,             /** 关联了fd到node或endpoint，清理的时候需要移除 **/
+                RESETTING,          /** 正在执行重置（防止递归死循环） **/
                 MAX
             };
         } flag_t;
@@ -51,7 +52,7 @@ namespace atbus {
         connection();
 
     public:
-        static ptr_t create(std::weak_ptr<node> owner);
+        static ptr_t create(node* owner);
 
         ~connection();
 
@@ -147,8 +148,9 @@ namespace atbus {
         channel::channel_address_t address_;
         std::bitset<flag_t::MAX> flags_;
 
-        std::weak_ptr<node> owner_;
-        std::weak_ptr<endpoint> binding_;
+        // 这里不用智能指针是为了该值在上层对象（node或者endpoint）析构时仍然可用
+        node* owner_;
+        endpoint* binding_;
         std::weak_ptr<connection> watcher_;
 
         typedef struct {
@@ -184,6 +186,8 @@ namespace atbus {
             push_fn_t push_fn;
         } connection_data_t;
         connection_data_t conn_data_;
+
+        friend class endpoint;
     };
 }
 

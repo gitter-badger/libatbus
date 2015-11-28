@@ -60,10 +60,16 @@ namespace atbus {
         conf->recv_buffer_size = ATBUS_MACRO_MSG_LIMIT * 32; // default for 3 times of ATBUS_MACRO_MSG_LIMIT = 2MB
         conf->send_buffer_size = ATBUS_MACRO_MSG_LIMIT;
         conf->send_buffer_number = 0;
+
+        conf->flags.reset();
     }
 
     node::ptr_t node::create() {
         ptr_t ret(new node());
+        if (!ret) {
+            return ret;
+        }
+
         ret->watcher_ = ret;
         return ret;
     }
@@ -77,14 +83,11 @@ namespace atbus {
             conf_ = *conf;
         }
 
-        self_.init(watcher_, id, conf_.children_mask);
-        node_father_.init(watcher_, 0, 0);
+        self_ = endpoint::create(this, id, conf_.children_mask);
 
         static_buffer_ = detail::buffer_block::malloc(conf_.msg_size + detail::buffer_block::head_size(conf_.msg_size) + 16); // 预留crc32长度和vint长度);
 
         ev_loop_ = NULL;
-
-        
 
         return EN_ATBUS_ERR_SUCCESS;
     }
@@ -98,6 +101,12 @@ namespace atbus {
     }
 
     int node::reset() {
+        // 这个函数可能会在析构时被调用，这时候不能使用watcher_.lock()
+        if (conf_.flags.test(flag_t::RESETTING)) {
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+        conf_.flags.set(flag_t::RESETTING, true);
+
         // TODO 所有连接断开
 
         // TODO 销毁endpoint
@@ -116,6 +125,7 @@ namespace atbus {
         }
         
         node_father_.reset();
+        conf_.flags.reset();
         return EN_ATBUS_ERR_SUCCESS;
     }
 
@@ -144,7 +154,7 @@ namespace atbus {
     }
 
     int node::listen(const char* addr_str) {
-        connection::ptr_t conn = connection::create(watcher_);
+        connection::ptr_t conn = connection::create(this);
         if(!conn) {
             return EN_ATBUS_ERR_MALLOC;
         }
@@ -168,19 +178,31 @@ namespace atbus {
     }
 
     bool node::is_child_node(bus_id_t id) const {
-        return self_.is_child_node(id);
+        return self_->is_child_node(id);
     }
 
     bool node::is_brother_node(bus_id_t id) const {
-        return self_.is_brother_node(id, node_father_.get_id(), node_father_.get_children_mask());
+        if (node_father_) {
+            return self_->is_brother_node(id, node_father_->get_id(), node_father_->get_children_mask());
+        } else {
+            return self_->is_brother_node(id, 0, 0);
+        }
     }
 
     bool node::is_parent_node(bus_id_t id) const {
-        return self_.is_parent_node(id, node_father_.get_id(), node_father_.get_children_mask());
+        if (node_father_) {
+            return self_->is_parent_node(id, node_father_->get_id(), node_father_->get_children_mask());
+        }
+
+        return false;
     }
 
     int node::get_pid() {
+#ifdef _MSC_VER
+        return _getpid();
+#else
         return getpid();
+#endif
     }
 
     static std::string& host_name_buffer() {
@@ -233,12 +255,8 @@ namespace atbus {
         return true;
     }
 
-    bool node::remove_proc_connection(connection::ptr_t conn) {
-        if (!conn) {
-            return false;
-        }
-
-        detail::auto_select_map<std::string, connection::ptr_t>::type::iterator iter = proc_connections_.find(conn->get_address().address);
+    bool node::remove_proc_connection(const std::string& conn_key) {
+        detail::auto_select_map<std::string, connection::ptr_t>::type::iterator iter = proc_connections_.find(conn_key);
         if (iter == proc_connections_.end()) {
             return false;
         }

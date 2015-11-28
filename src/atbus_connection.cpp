@@ -23,17 +23,21 @@ namespace atbus {
         };
     }
 
-    connection::connection():state_(state_t::DISCONNECTED) {
+    connection::connection():state_(state_t::DISCONNECTED), owner_(NULL), binding_(NULL){
         flags_.reset();
         memset(&conn_data_, 0, sizeof(conn_data_));
     }
 
-    connection::ptr_t connection::create(std::weak_ptr<node> owner) {
-        if (!owner.lock()) {
+    connection::ptr_t connection::create(node* owner) {
+        if (!owner) {
             return connection::ptr_t();
         }
 
         connection::ptr_t ret(new connection());
+        if (!ret) {
+            return ret;
+        }
+
         ret->owner_ = owner;
         ret->watcher_ = ret;
         return ret;
@@ -44,20 +48,32 @@ namespace atbus {
     }
 
     void connection::reset() {
+        // 这个函数可能会在析构时被调用，这时候不能使用watcher_.lock()
+        if(flags_.test(flag_t::RESETTING)) {
+            return;
+        }
+        flags_.set(flag_t::RESETTING, true);
+
         disconnect();
         // 移除proc队列
         if(flags_.test(flag_t::REG_PROC)) {
-            node::ptr_t owner = owner_.lock();
-            if (owner) {
-                owner->remove_proc_connection(watcher_.lock());
+            if (NULL != owner_) {
+                owner_->remove_proc_connection(address_.address);
             }
         }
 
-        // TODO 关闭fd
+        if (NULL != binding_) {
+            binding_->remove_connection(this);
+        }
 
         flags_.reset();
-        binding_.reset();
-        owner_.reset();
+
+        // 只能由上层设置binding_所属的节点
+        // binding_ = NULL;
+
+        // 只要connection存在，则它一定存在于owner_的某个位置。
+        // 并且这个值只能在创建时指定，所以不能重置这个值
+        // owner_ = NULL;
     }
 
     int connection::proc(node& n, time_t sec, time_t usec) {
@@ -73,11 +89,10 @@ namespace atbus {
             return EN_ATBUS_ERR_ALREADY_INITED;
         }
 
-        node::ptr_t owner = owner_.lock();
-        if (!owner) {
+        if (NULL == owner_) {
             return EN_ATBUS_ERR_NOT_INITED;
         }
-        const node::conf_t& conf = owner->get_conf();
+        const node::conf_t& conf = owner_->get_conf();
 
         if (false == channel::make_address(addr_str, address_)) {
             return EN_ATBUS_ERR_CHANNEL_ADDR_INVALID;
@@ -103,7 +118,7 @@ namespace atbus {
             conn_data_.shared.mem.channel = mem_chann;
             conn_data_.shared.mem.buffer = reinterpret_cast<void*>(ad);
             conn_data_.shared.mem.len = conf.recv_buffer_size;
-            owner->add_proc_connection(watcher_.lock());
+            owner_->add_proc_connection(watcher_.lock());
             flags_.set(flag_t::REG_PROC, true);
             state_ = state_t::CONNECTED;
 
@@ -128,7 +143,7 @@ namespace atbus {
             conn_data_.shared.shm.channel = shm_chann;
             conn_data_.shared.shm.shm_key = shm_key;
             conn_data_.shared.shm.len = conf.recv_buffer_size;
-            owner->add_proc_connection(watcher_.lock());
+            owner_->add_proc_connection(watcher_.lock());
             flags_.set(flag_t::REG_PROC, true);
             state_ = state_t::CONNECTED;
 
@@ -140,10 +155,10 @@ namespace atbus {
             }
             connection::ptr_t self = watcher_.lock();
             async_data->conn = self;
-            async_data->owner_node = owner;
+            async_data->owner_node = owner_->get_watcher();
 
             state_ = state_t::CONNECTING;
-            int res = channel::io_stream_listen(owner->get_iostream_channel(), address_, iostream_on_listen_cb, async_data, 0);
+            int res = channel::io_stream_listen(owner_->get_iostream_channel(), address_, iostream_on_listen_cb, async_data, 0);
             if (res < 0) {
                 delete async_data;
                 return res;
@@ -151,7 +166,7 @@ namespace atbus {
 
             // 可能会进入异步流程
             if (state_t::CONNECTING == state_) {
-                owner->add_connection_timer(self);
+                owner_->add_connection_timer(self);
             }
         }
 
@@ -163,11 +178,10 @@ namespace atbus {
             return EN_ATBUS_ERR_ALREADY_INITED;
         }
 
-        node::ptr_t owner = owner_.lock();
-        if (!owner) {
+        if (NULL == owner_) {
             return EN_ATBUS_ERR_NOT_INITED;
         }
-        const node::conf_t& conf = owner->get_conf();
+        const node::conf_t& conf = owner_->get_conf();
 
         if (false == channel::make_address(addr_str, address_)) {
             return EN_ATBUS_ERR_CHANNEL_ADDR_INVALID;
@@ -231,10 +245,10 @@ namespace atbus {
             }
             connection::ptr_t self = watcher_.lock();
             async_data->conn = self;
-            async_data->owner_node = owner;
+            async_data->owner_node = owner_->get_watcher();
 
             state_ = state_t::CONNECTING;
-            int res = channel::io_stream_connect(owner->get_iostream_channel(), address_, iostream_on_connected_cb, async_data, 0);
+            int res = channel::io_stream_connect(owner_->get_iostream_channel(), address_, iostream_on_connected_cb, async_data, 0);
             if (res < 0) {
                 delete async_data;
                 return res;
@@ -242,7 +256,7 @@ namespace atbus {
 
             // 可能会进入异步流程
             if (state_t::CONNECTING == state_) {
-                owner->add_connection_timer(self);
+                owner_->add_connection_timer(self);
             }
         }
 
@@ -254,16 +268,15 @@ namespace atbus {
             return EN_ATBUS_ERR_NOT_INITED;
         }
 
-        node::ptr_t owner = owner_.lock();
         state_ = state_t::DISCONNECTING;
         if (NULL != conn_data_.free_fn) {
-            if (owner) {
-                conn_data_.free_fn(*owner, *this);
+            if (NULL != owner_) {
+                conn_data_.free_fn(*owner_, *this);
             }
         }
 
-        if (owner) {
-            owner->on_disconnect(this);
+        if (NULL != owner_) {
+            owner_->on_disconnect(this);
         }
 
         memset(&conn_data_, 0, sizeof(conn_data_));
@@ -288,11 +301,11 @@ namespace atbus {
     }
 
     endpoint* connection::get_binding() {
-        return binding_.lock().get();
+        return binding_;
     }
 
     const endpoint* connection::get_binding() const {
-        return binding_.lock().get();
+        return binding_;
     }
 
     void connection::iostream_on_listen_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s) {
@@ -303,7 +316,7 @@ namespace atbus {
         }
 
         if (status < 0) {
-            async_data->owner_node->on_error(async_data->conn->binding_.lock().get(), async_data->conn.get(), status, channel->error_code);
+            async_data->owner_node->on_error(async_data->conn->binding_, async_data->conn.get(), status, channel->error_code);
             async_data->conn->state_ = state_t::DISCONNECTED;
 
         } else {
@@ -327,7 +340,7 @@ namespace atbus {
         }
 
         if (status < 0) {
-            async_data->owner_node->on_error(async_data->conn->binding_.lock().get(), async_data->conn.get(), status, channel->error_code);
+            async_data->owner_node->on_error(async_data->conn->binding_, async_data->conn.get(), status, channel->error_code);
             async_data->conn->state_ = state_t::DISCONNECTED;
 
         } else {
@@ -374,7 +387,7 @@ namespace atbus {
             return;
         }
 
-        ptr_t conn = create(n->get_watcher());
+        ptr_t conn = create(n);
         conn->state_ = state_t::HANDSHAKING;
         conn->flags_.set(flag_t::REG_FD, true);
 

@@ -46,12 +46,12 @@
 namespace atbus {
     namespace channel {
         // utility functions
-        typedef struct {
+        struct channel_address_t {
             std::string         address;        // 主机完整地址，比如：ipv4://127.0.0.1:8123 或 unix:///tmp/atbut.sock
             std::string         scheme;         // 协议名称，比如：ipv4 或 unix
             std::string         host;           // 主机地址，比如：127.0.0.1 或 /tmp/atbut.sock
             int                 port;           // 端口。（仅网络连接有效）
-        } channel_address_t;
+        };
 
         // memory channel
         struct mem_channel;
