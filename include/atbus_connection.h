@@ -43,6 +43,8 @@ namespace atbus {
             enum type {
                 REG_PROC = 0,       /** 注册了proc记录到node，清理的时候需要移除 **/
                 REG_FD,             /** 关联了fd到node或endpoint，清理的时候需要移除 **/
+                ACCESS_SHARE_ADDR,  /** 共享内部地址（内存通道的地址共享） **/
+                ACCESS_SHARE_HOST,  /** 共享物理机（共享内存通道的物理机共享） **/
                 RESETTING,          /** 正在执行重置（防止递归死循环） **/
                 MAX
             };
@@ -118,6 +120,9 @@ namespace atbus {
          * @brief 获取关联的端点
          */
         const endpoint* get_binding() const;
+
+        inline state_t::type get_status() const { return state_; }
+        inline bool check_flag(flag_t::type f) const { return flags_.test(f); }
     public:
         static void iostream_on_listen_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
         static void iostream_on_connected_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);

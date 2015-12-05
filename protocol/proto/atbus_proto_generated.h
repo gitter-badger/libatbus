@@ -42,9 +42,13 @@ inline const char *EnumNameCMD(CMD e) { return EnumNamesCMD()[static_cast<int>(e
 
 struct forward_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   uint64_t from() const { return GetField<uint64_t>(4, 0); }
+  bool mutate_from(uint64_t from) { return SetField(4, from); }
   uint64_t to() const { return GetField<uint64_t>(6, 0); }
+  bool mutate_to(uint64_t to) { return SetField(6, to); }
   const flatbuffers::Vector<uint64_t> *router() const { return GetPointer<const flatbuffers::Vector<uint64_t> *>(8); }
+  flatbuffers::Vector<uint64_t> *mutable_router() { return GetPointer<flatbuffers::Vector<uint64_t> *>(8); }
   const flatbuffers::Vector<int8_t> *content() const { return GetPointer<const flatbuffers::Vector<int8_t> *>(10); }
+  flatbuffers::Vector<int8_t> *mutable_content() { return GetPointer<flatbuffers::Vector<int8_t> *>(10); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, 4 /* from */) &&
@@ -87,6 +91,7 @@ inline flatbuffers::Offset<forward_data> Createforward_data(flatbuffers::FlatBuf
 
 struct channel_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const flatbuffers::String *address() const { return GetPointer<const flatbuffers::String *>(4); }
+  flatbuffers::String *mutable_address() { return GetPointer<flatbuffers::String *>(4); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<flatbuffers::uoffset_t>(verifier, 4 /* address */) &&
@@ -116,10 +121,15 @@ inline flatbuffers::Offset<channel_data> Createchannel_data(flatbuffers::FlatBuf
 
 struct node_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   uint64_t bus_id() const { return GetField<uint64_t>(4, 0); }
+  bool mutate_bus_id(uint64_t bus_id) { return SetField(4, bus_id); }
   uint8_t overwrite() const { return GetField<uint8_t>(6, 0); }
+  bool mutate_overwrite(uint8_t overwrite) { return SetField(6, overwrite); }
   uint8_t has_global_tree() const { return GetField<uint8_t>(8, 0); }
+  bool mutate_has_global_tree(uint8_t has_global_tree) { return SetField(8, has_global_tree); }
   uint8_t children_id_mask() const { return GetField<uint8_t>(10, 0); }
+  bool mutate_children_id_mask(uint8_t children_id_mask) { return SetField(10, children_id_mask); }
   const flatbuffers::Vector<flatbuffers::Offset<node_data>> *children() const { return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<node_data>> *>(12); }
+  flatbuffers::Vector<flatbuffers::Offset<node_data>> *mutable_children() { return GetPointer<flatbuffers::Vector<flatbuffers::Offset<node_data>> *>(12); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, 4 /* bus_id */) &&
@@ -166,6 +176,7 @@ inline flatbuffers::Offset<node_data> Createnode_data(flatbuffers::FlatBufferBui
 
 struct node_tree FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const flatbuffers::Vector<flatbuffers::Offset<node_data>> *nodes() const { return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<node_data>> *>(4); }
+  flatbuffers::Vector<flatbuffers::Offset<node_data>> *mutable_nodes() { return GetPointer<flatbuffers::Vector<flatbuffers::Offset<node_data>> *>(4); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<flatbuffers::uoffset_t>(verifier, 4 /* nodes */) &&
@@ -196,7 +207,9 @@ inline flatbuffers::Offset<node_tree> Createnode_tree(flatbuffers::FlatBufferBui
 
 struct ping_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   uint64_t id() const { return GetField<uint64_t>(4, 0); }
+  bool mutate_id(uint64_t id) { return SetField(4, id); }
   int64_t time() const { return GetField<int64_t>(6, 0); }
+  bool mutate_time(int64_t time) { return SetField(6, time); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, 4 /* id */) &&
@@ -229,9 +242,13 @@ inline flatbuffers::Offset<ping_data> Createping_data(flatbuffers::FlatBufferBui
 
 struct reg_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   uint64_t id() const { return GetField<uint64_t>(4, 0); }
+  bool mutate_id(uint64_t id) { return SetField(4, id); }
   int32_t pid() const { return GetField<int32_t>(6, 0); }
+  bool mutate_pid(int32_t pid) { return SetField(6, pid); }
   const flatbuffers::String *hostname() const { return GetPointer<const flatbuffers::String *>(8); }
+  flatbuffers::String *mutable_hostname() { return GetPointer<flatbuffers::String *>(8); }
   const flatbuffers::Vector<flatbuffers::Offset<channel_data>> *channels() const { return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<channel_data>> *>(10); }
+  flatbuffers::Vector<flatbuffers::Offset<channel_data>> *mutable_channels() { return GetPointer<flatbuffers::Vector<flatbuffers::Offset<channel_data>> *>(10); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, 4 /* id */) &&
@@ -275,6 +292,7 @@ inline flatbuffers::Offset<reg_data> Createreg_data(flatbuffers::FlatBufferBuild
 
 struct conn_data FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const channel_data *address() const { return GetPointer<const channel_data *>(4); }
+  channel_data *mutable_address() { return GetPointer<channel_data *>(4); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<flatbuffers::uoffset_t>(verifier, 4 /* address */) &&
@@ -304,10 +322,15 @@ inline flatbuffers::Offset<conn_data> Createconn_data(flatbuffers::FlatBufferBui
 
 struct msg_body FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const forward_data *forward() const { return GetPointer<const forward_data *>(4); }
+  forward_data *mutable_forward() { return GetPointer<forward_data *>(4); }
   const node_tree *sync() const { return GetPointer<const node_tree *>(6); }
+  node_tree *mutable_sync() { return GetPointer<node_tree *>(6); }
   const ping_data *ping() const { return GetPointer<const ping_data *>(8); }
+  ping_data *mutable_ping() { return GetPointer<ping_data *>(8); }
   const reg_data *reg() const { return GetPointer<const reg_data *>(10); }
+  reg_data *mutable_reg() { return GetPointer<reg_data *>(10); }
   const conn_data *conn() const { return GetPointer<const conn_data *>(12); }
+  conn_data *mutable_conn() { return GetPointer<conn_data *>(12); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<flatbuffers::uoffset_t>(verifier, 4 /* forward */) &&
@@ -357,8 +380,11 @@ inline flatbuffers::Offset<msg_body> Createmsg_body(flatbuffers::FlatBufferBuild
 
 struct msg_head FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   CMD cmd() const { return static_cast<CMD>(GetField<int8_t>(4, 0)); }
+  bool mutate_cmd(CMD cmd) { return SetField(4, static_cast<int8_t>(cmd)); }
   int32_t type() const { return GetField<int32_t>(6, 0); }
+  bool mutate_type(int32_t type) { return SetField(6, type); }
   int32_t ret() const { return GetField<int32_t>(8, 0); }
+  bool mutate_ret(int32_t ret) { return SetField(8, ret); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int8_t>(verifier, 4 /* cmd */) &&
@@ -395,7 +421,9 @@ inline flatbuffers::Offset<msg_head> Createmsg_head(flatbuffers::FlatBufferBuild
 
 struct msg FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const msg_head *head() const { return GetPointer<const msg_head *>(4); }
+  msg_head *mutable_head() { return GetPointer<msg_head *>(4); }
   const msg_body *body() const { return GetPointer<const msg_body *>(6); }
+  msg_body *mutable_body() { return GetPointer<msg_body *>(6); }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<flatbuffers::uoffset_t>(verifier, 4 /* head */) &&
@@ -429,6 +457,8 @@ inline flatbuffers::Offset<msg> Createmsg(flatbuffers::FlatBufferBuilder &_fbb,
 }
 
 inline const atbus::protocol::msg *Getmsg(const void *buf) { return flatbuffers::GetRoot<atbus::protocol::msg>(buf); }
+
+inline msg *GetMutablemsg(void *buf) { return flatbuffers::GetMutableRoot<msg>(buf); }
 
 inline bool VerifymsgBuffer(flatbuffers::Verifier &verifier) { return verifier.VerifyBuffer<atbus::protocol::msg>(); }
 

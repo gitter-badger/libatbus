@@ -38,6 +38,7 @@ namespace atbus {
     }
 
     node::node(): state_(state_t::CREATED), ev_loop_(NULL), static_buffer_(NULL) {
+        node_father_.last_action_time_ = 0;
     }
 
     node::~node() {
@@ -83,7 +84,7 @@ namespace atbus {
             conf_ = *conf;
         }
 
-        self_ = endpoint::create(this, id, conf_.children_mask);
+        self_ = endpoint::create(this, id, conf_.children_mask, get_pid(), get_hostname());
 
         static_buffer_ = detail::buffer_block::malloc(conf_.msg_size + detail::buffer_block::head_size(conf_.msg_size) + 16); // 预留crc32长度和vint长度);
 
@@ -124,7 +125,8 @@ namespace atbus {
             static_buffer_ = NULL;
         }
         
-        node_father_.reset();
+        node_father_.node_.reset();
+        node_father_.last_action_time_ = 0;
         conf_.flags.reset();
         return EN_ATBUS_ERR_SUCCESS;
     }
@@ -164,8 +166,145 @@ namespace atbus {
             return ret;
         }
 
-        // TODO 添加到self_里
+        // 添加到self_里
+        if(false == self_->add_connection(conn.get(), false)) {
+            return EN_ATBUS_ERR_ALREADY_INITED;
+        }
+
+        // 记录监听地址
+        listen_address_.push_back(conn->get_address().address);
         return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    int node::connect(const char* addr_str) {
+        connection::ptr_t conn = connection::create(this);
+        if (!conn) {
+            return EN_ATBUS_ERR_MALLOC;
+        }
+
+        int ret = conn->connect(addr_str);
+        if (ret < 0) {
+            return ret;
+        }
+
+        // 添加到检测队列
+        add_connection_timer(conn);
+        return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    int node::disconnect(bus_id_t id) {
+        if (node_father_.node_ && id == node_father_.node_->get_id()) {
+            node_father_.node_->reset();
+            node_father_.node_.reset();
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        endpoint* ep = find_child(node_brother_, id);
+        if (NULL != ep && ep->get_id() == id) {
+            ep->reset();
+
+            // 移除连接关系
+            remove_child(node_brother_, id);
+            // TODO 移除全局表
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        ep = find_child(node_children_, id);
+        if (NULL != ep && ep->get_id() == id) {
+            ep->reset();
+
+            // 移除连接关系
+            remove_child(node_brother_, id);
+            // TODO 移除全局表
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        return EN_ATBUS_ERR_ATNODE_NOT_FOUND;
+    }
+
+    int node::send_data(bus_id_t tid, int type, const void* buffer, size_t s) {
+        if (s >= conf_.msg_size) {
+            return EN_ATBUS_ERR_BUFF_LIMIT;
+        }
+
+        if(tid == get_id()) {
+            // 发送给自己的数据直接回调数据接口
+            on_recv_data(NULL, type, buffer, s);
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        flatbuffers::FlatBufferBuilder fbb;
+        protocol::msgBuilder mb(fbb);
+
+        // header
+        {
+            protocol::msg_headBuilder mhb(fbb);
+            mhb.add_cmd(protocol::CMD_CMD_DATA_TRANSFORM_REQ);
+            mhb.add_ret(0);
+            mhb.add_type(type);
+            mb.add_head(mhb.Finish());
+        }
+        // body
+        {
+            protocol::msg_bodyBuilder mbb(fbb);
+            protocol::forward_dataBuilder mbfdb(fbb);
+            mbfdb.add_from(get_id());
+            mbfdb.add_to(tid);
+            mbfdb.add_content(fbb.CreateVector<int8_t>(reinterpret_cast<const int8_t*>(buffer), s));
+
+            mb.add_body(mbb.Finish());
+        }
+
+        fbb.Finish(mb.Finish());
+        return send_msg(tid, fbb);
+    }
+
+    int node::send_msg(bus_id_t tid, flatbuffers::FlatBufferBuilder& mb) {
+        if (tid == get_id()) {
+            // 发送给自己的数据直接回调数据接口
+            const protocol::msg* m = protocol::Getmsg(mb.GetBufferPointer());
+            on_recv(NULL, m, 0, 0);
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        connection* conn = NULL;
+        do {
+            // 兄弟节点
+            if (is_brother_node(tid)) {
+                endpoint* target = find_child(node_brother_, tid);
+                if (NULL != target && target->is_child_node(tid)) {
+                    conn = self_->get_data_connection(target);
+                    break;
+                }
+                return EN_ATBUS_ERR_ATNODE_INVALID_ID;
+            }
+
+            // 子节点
+            if (is_child_node(tid)) {
+                endpoint* target = find_child(node_children_, tid);
+                if (NULL != target && target->is_child_node(tid)) {
+                    conn = self_->get_data_connection(target);
+                    break;
+                }
+                return EN_ATBUS_ERR_ATNODE_INVALID_ID;
+            }
+
+            // 其他情况发给父节点
+            if (node_father_.node_ && tid == node_father_.node_->get_id()) {
+                conn = self_->get_data_connection(node_father_.node_.get());
+                break;
+            }
+        } while (false);
+
+        if (NULL == conn) {
+            return EN_ATBUS_ERR_ATNODE_NO_CONNECTION;
+        }
+
+        if (mb.GetSize() >= conf_.msg_size) {
+            return EN_ATBUS_ERR_BUFF_LIMIT;
+        }
+
+        return conn->push(mb.GetBufferPointer(), mb.GetSize());;
     }
 
     adapter::loop_t* node::get_evloop() {
@@ -182,16 +321,16 @@ namespace atbus {
     }
 
     bool node::is_brother_node(bus_id_t id) const {
-        if (node_father_) {
-            return self_->is_brother_node(id, node_father_->get_id(), node_father_->get_children_mask());
+        if (node_father_.node_) {
+            return self_->is_brother_node(id, node_father_.node_->get_children_mask());
         } else {
-            return self_->is_brother_node(id, 0, 0);
+            return self_->is_brother_node(id, 0);
         }
     }
 
     bool node::is_parent_node(bus_id_t id) const {
-        if (node_father_) {
-            return self_->is_parent_node(id, node_father_->get_id(), node_father_->get_children_mask());
+        if (node_father_.node_) {
+            return self_->is_parent_node(id, node_father_.node_->get_id(), node_father_.node_->get_children_mask());
         }
 
         return false;
@@ -281,6 +420,9 @@ namespace atbus {
         // TODO 消息传递
     }
 
+    void node::on_recv_data(connection* conn, int type, const void* buffer, size_t s) const {
+    }
+
     int node::on_error(const endpoint* ep, const connection* conn, int status, int errcode) {
         if (NULL == ep && NULL != conn) {
             ep = conn->get_binding();
@@ -299,7 +441,7 @@ namespace atbus {
         }
         
         // TODO 断线逻辑
-
+        // conn->reset();
         return EN_ATBUS_ERR_SUCCESS;
     }
 
@@ -311,6 +453,76 @@ namespace atbus {
         // TODO 如果处于握手阶段，发送节点关系逻辑并加入握手连接池并加入超时判定池
 
         return EN_ATBUS_ERR_SUCCESS;
+    }
+
+
+    endpoint* node::find_child(endpoint_collection_t& coll, bus_id_t id) {
+        // key 保存为子域上界，所以第一个查找的节点要么直接是value，要么是value的子节点
+        endpoint_collection_t::iterator iter = coll.lower_bound(id);
+        if (iter == coll.end()) {
+            return NULL;
+        }
+
+        if (iter->second->get_id() == id) {
+            return iter->second.get();
+        }
+
+        // 不能直接发送到间接子节点，所以直接发给直接子节点由其转发即可
+        if (iter->second->is_child_node(id)) {
+            return iter->second.get();
+        }
+
+        return NULL;
+    }
+
+    bool node::insert_child(endpoint_collection_t& coll, endpoint::ptr_t ep) {
+        if (!ep) {
+            return false;
+        }
+
+        bus_id_t maskv = endpoint::get_children_max_id(ep->get_id(), ep->get_children_mask());
+
+        // key 保存为子域上界，所以第一个查找的节点要么目标节点的父节点，要么子节点域交叉
+        endpoint_collection_t::iterator iter = coll.lower_bound(ep->get_id());
+
+        // 如果在所有子节点域外则直接添加
+        if (iter == coll.end()) {
+            coll[maskv] = ep;
+            return true;
+        }
+
+        // 如果是数据merge则出错退出
+        if (iter->second->get_id() == ep->get_id()) {
+            return false;
+        }
+
+        // 如果新节点是老节点的子节点，则失败退出
+        if (iter->second->is_child_node(ep->get_id())) {
+            return false;
+        }
+
+        // 如果有老节点是新节点的子节点，则失败退出
+        --iter;
+        if (iter != coll.end() && ep->is_child_node(iter->second->get_id())) {
+            return false;
+        }
+
+        coll[maskv] = ep;
+        return true;
+    }
+
+    bool node::remove_child(endpoint_collection_t& coll, bus_id_t id) {
+        endpoint_collection_t::iterator iter = coll.lower_bound(id);
+        if (iter == coll.end()) {
+            return false;
+        }
+
+        if (iter->second->get_id() != id) {
+            return false;
+        }
+
+        coll.erase(iter);
+        return true;
     }
 
     channel::io_stream_channel* node::get_iostream_channel() {

@@ -13,7 +13,7 @@
 #include "atbus_endpoint.h"
 
 namespace atbus {
-    endpoint::ptr_t endpoint::create(node* owner, bus_id_t id, uint32_t children_mask) {
+    endpoint::ptr_t endpoint::create(node* owner, bus_id_t id, uint32_t children_mask, int32_t pid, const std::string& hn) {
         if (NULL == owner) {
             return endpoint::ptr_t();
         }
@@ -25,13 +25,17 @@ namespace atbus {
 
         ret->id_ = id;
         ret->children_mask_ = children_mask;
+        ret->pid_ = pid;
+        ret->hostname_ = hn;
 
         ret->owner_ = owner;
         ret->watcher_ = ret;
         return ret;
     }
 
-    endpoint::endpoint():id_(0), children_mask_(0), owner_(NULL) {}
+    endpoint::endpoint():id_(0), children_mask_(0), pid_(0), owner_(NULL) {
+        flags_.reset();
+    }
 
     endpoint::~endpoint() {
         reset();
@@ -39,10 +43,27 @@ namespace atbus {
 
     void endpoint::reset() {
         // 这个函数可能会在析构时被调用，这时候不能使用watcher_.lock()
+        if (flags_.test(flag_t::RESETTING)) {
+            return;
+        }
+        flags_.set(flag_t::RESETTING, true);
 
-        id_ = 0;
-        children_mask_ = 0;
+        // 释放连接
+        if(ctrl_conn_) {
+            ctrl_conn_->reset();
+            ctrl_conn_.reset();
+        }
+        for (std::list<connection::ptr_t>::iterator iter = data_conn_.begin(); iter != data_conn_.end(); ++ iter) {
+            if(*iter) {
+                (*iter)->reset();
+            }
+        }
+        data_conn_.clear();
 
+        // 从父节点移除
+
+
+        flags_.reset();
         // 只要endpoint存在，则它一定存在于owner_的某个位置。
         // 并且这个值只能在创建时指定，所以不能重置这个值
     }
@@ -53,7 +74,8 @@ namespace atbus {
         return (id & mask) == (id_ & mask);
     }
 
-    bool endpoint::is_brother_node(bus_id_t id, bus_id_t father_id, uint32_t father_mask) const {
+    bool endpoint::is_brother_node(bus_id_t id, uint32_t father_mask) const {
+        // 兄弟节点的子节点也视为兄弟节点
         // 目前id是整数，直接位运算即可
         bus_id_t c_mask = ~((1 << children_mask_) - 1);
         bus_id_t f_mask = ~((1 << father_mask) - 1);
@@ -65,8 +87,22 @@ namespace atbus {
         return id == father_id;
     }
 
+    endpoint::bus_id_t endpoint::get_children_min_id(bus_id_t id, uint32_t mask) {
+        bus_id_t maskv = (1 << mask) - 1;
+        return id & (~maskv);
+    }
+
+    endpoint::bus_id_t endpoint::get_children_max_id(bus_id_t id, uint32_t mask) {
+        bus_id_t maskv = (1 << mask) - 1;
+        return (id + maskv) & (~maskv);
+    }
+
     bool endpoint::add_connection(connection* conn, bool force_data) {
         if (!conn) {
+            return false;
+        }
+
+        if (flags_.test(flag_t::RESETTING)) {
             return false;
         }
 
@@ -80,6 +116,7 @@ namespace atbus {
 
         if (force_data || ctrl_conn_) {
             data_conn_.push_back(conn->watcher_.lock());
+            flags_.set(flag_t::CONNECTION_SORTED, false); // 置为未排序状态
         } else {
             ctrl_conn_ = conn->watcher_.lock();
         }
@@ -93,13 +130,18 @@ namespace atbus {
             return false;
         }
 
-        if (conn == ctrl_conn_.get()) {
-            assert(this == conn->binding_);
+        assert(this == conn->binding_);
 
+        // 重置流程会在reset里清理对象，不需要再进行一次查找
+        if (flags_.test(flag_t::RESETTING)) {
             conn->reset();
-
             conn->binding_ = NULL;
-            ctrl_conn_.reset();
+            return true;
+        }
+
+        if (conn == ctrl_conn_.get()) {
+            // 控制节点离线则直接下线
+            reset();
             return true;
         }
 
@@ -112,10 +154,87 @@ namespace atbus {
 
                 conn->binding_ = NULL;
                 data_conn_.erase(iter);
+
+                // 数据节点全部离线也直接下线
+                if (data_conn_.empty()) {
+                    reset();
+                }
                 return true;
             }
         }
 
         return false;
+    }
+
+    bool endpoint::sort_connection_cmp_fn(const connection::ptr_t& left, const connection::ptr_t& right) {
+        if (left->check_flag(connection::flag_t::ACCESS_SHARE_ADDR) != right->check_flag(connection::flag_t::ACCESS_SHARE_ADDR)) {
+            return left->check_flag(connection::flag_t::ACCESS_SHARE_ADDR);
+        }
+
+        if (left->check_flag(connection::flag_t::ACCESS_SHARE_HOST) != right->check_flag(connection::flag_t::ACCESS_SHARE_HOST)) {
+            return left->check_flag(connection::flag_t::ACCESS_SHARE_HOST);
+        }
+
+        return false;
+    }
+
+    connection* endpoint::get_ctrl_connection(endpoint* ep) const {
+        if (NULL == ep) {
+            return NULL;
+        }
+
+        if (this == ep) {
+            return NULL;
+        }
+
+        if (ep->ctrl_conn_ && connection::state_t::CONNECTED == ep->ctrl_conn_->get_status()) {
+            return ep->ctrl_conn_.get();
+        }
+
+        return NULL;
+    }
+
+    connection* endpoint::get_data_connection(endpoint* ep) const {
+        if (NULL == ep) {
+            return NULL;
+        }
+
+        if (this == ep) {
+            return NULL;
+        }
+
+        bool share_pid = false, share_host = false;
+        if (ep->get_hostname() == get_hostname()) {
+            share_host = true;
+            if (ep->get_pid() == get_pid()) {
+                share_pid = true;
+            }
+        }
+
+        // 按性能邮件及排序mem>shm>fd
+        if (false == ep->flags_.test(flag_t::CONNECTION_SORTED)) {
+            ep->data_conn_.sort(sort_connection_cmp_fn);
+            ep->flags_.set(flag_t::CONNECTION_SORTED, true);
+        }
+
+        for (std::list<connection::ptr_t>::iterator iter = ep->data_conn_.begin(); iter != ep->data_conn_.end(); ++iter) {
+            if (connection::state_t::CONNECTED != (*iter)->get_status()) {
+                continue;
+            }
+
+            if (share_pid && (*iter)->check_flag(connection::flag_t::ACCESS_SHARE_ADDR)) {
+                return (*iter).get();
+            }
+
+            if (share_host && (*iter)->check_flag(connection::flag_t::ACCESS_SHARE_HOST)) {
+                return (*iter).get();
+            }
+
+            if (!(*iter)->check_flag(connection::flag_t::ACCESS_SHARE_HOST)) {
+                return (*iter).get();
+            }
+        }
+
+        return get_ctrl_connection(ep);
     }
 }

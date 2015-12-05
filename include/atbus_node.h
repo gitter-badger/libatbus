@@ -12,7 +12,7 @@
 
 #include <bitset>
 #include <ctime>
-#include <list>
+#include <map>
 
 #include "std/smart_ptr.h"
 #include "std/functional.h"
@@ -24,11 +24,15 @@
 
 #include "atbus_endpoint.h"
 
-namespace protocol {
-    struct msg;
+namespace flatbuffers {
+    class FlatBufferBuilder;
 }
 
 namespace atbus {
+    namespace protocol {
+        struct msg;
+    }
+
     class node: public util::design_pattern::noncopyable {
     public:
         typedef std::shared_ptr<node> ptr_t;
@@ -75,7 +79,9 @@ namespace atbus {
             size_t send_buffer_number;                  /** 发送缓冲区静态Buffer数量限制，0则为动态缓冲区 **/
         } conf_t;
 
-        // ================== 用这个来取代C++继承，减少学习成本 ==================
+        typedef std::map<bus_id_t, endpoint::ptr_t> endpoint_collection_t;
+
+        // ================== 用这个来取代C++继承，减少层次结构 ==================
         struct no_stream_channel_t {
             void* channel;
             key_t key;
@@ -133,18 +139,18 @@ namespace atbus {
          * @param addr 连接目标地址
          * @return 0或错误码
          */
-        //int connect(const char* addr);
+        int connect(const char* addr);
 
         /**
          * @brief 断开到目标的连接
          * @param id 目标ID
          * @return 0或错误码
          */
-        //int disconnect(bus_id_t id);
+        int disconnect(bus_id_t id);
 
 
         /**
-         * @brief 监听数据接收地址
+         * @brief 发送数据
          * @param tid 发送目标ID
          * @param type 自定义类型，将作为msg.head.type字段传递。可用于业务区分服务类型
          * @param buffer 数据块地址
@@ -153,11 +159,17 @@ namespace atbus {
          * @note 接收端收到的数据很可能不是地址对齐的，所以这里不建议发送内存数据
          *       如果非要发送内存数据的话，一定要memcpy，不能直接类型转换，除非手动设置了地址对齐规则
          */
-        //int send_to(bus_id_t tid, int type, const void* buffer, size_t s);
+        int send_data(bus_id_t tid, int type, const void* buffer, size_t s);
+
+        /**
+         * @brief 发送消息
+         * @param tid 发送目标ID
+         * @param mb 消息构建器
+         */
+        int send_msg(bus_id_t tid, flatbuffers::FlatBufferBuilder& mb);
 
     public:
         channel::io_stream_channel* get_iostream_channel();
-
     private:
         adapter::loop_t* get_evloop(); 
         channel::io_stream_conf* get_iostream_conf();
@@ -181,12 +193,22 @@ namespace atbus {
         bool add_connection_timer(connection::ptr_t conn);
 
         void on_recv(connection* conn, const protocol::msg* m, int status, int errcode);
+
+        void on_recv_data(connection* conn, int type, const void* buffer, size_t s) const;
+
         int on_error(const endpoint*, const connection*, int, int);
         int on_disconnect(const connection*);
         int on_new_connection(connection*);
 
         inline const detail::buffer_block* get_temp_static_buffer() const { return static_buffer_; }
         inline detail::buffer_block* get_temp_static_buffer() { return static_buffer_; }
+
+    private:
+        static endpoint* find_child(endpoint_collection_t& coll, bus_id_t id);
+
+        static bool insert_child(endpoint_collection_t& coll, endpoint::ptr_t ep);
+
+        static bool remove_child(endpoint_collection_t& coll, bus_id_t id);
     private:
         // ============ 基础信息 ============
         // ID
@@ -197,6 +219,7 @@ namespace atbus {
         std::weak_ptr<node> watcher_; // just like std::shared_from_this<T>
 
         // ============ IO事件数据 ============
+        std::list<std::string> listen_address_;
         // 事件分发器
         adapter::loop_t* ev_loop_;
         std::shared_ptr<channel::io_stream_channel> iostream_channel_;
@@ -220,11 +243,17 @@ namespace atbus {
 
         // ============ 节点逻辑关系数据 ============
         // 父节点
-        endpoint::ptr_t node_father_;
+        struct father_info_t {
+            endpoint::ptr_t node_;
+            time_t last_action_time_;
+        };
+        father_info_t node_father_;
 
         // 兄弟节点
+        endpoint_collection_t node_brother_;
 
         // 子节点
+        endpoint_collection_t node_children_;
 
         // 全局路由表
 

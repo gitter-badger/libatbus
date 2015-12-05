@@ -55,19 +55,12 @@ namespace atbus {
         flags_.set(flag_t::RESETTING, true);
 
         disconnect();
-        // 移除proc队列
-        if(flags_.test(flag_t::REG_PROC)) {
-            if (NULL != owner_) {
-                owner_->remove_proc_connection(address_.address);
-            }
-        }
 
         if (NULL != binding_) {
             binding_->remove_connection(this);
         }
 
         flags_.reset();
-
         // 只能由上层设置binding_所属的节点
         // binding_ = NULL;
 
@@ -77,6 +70,10 @@ namespace atbus {
     }
 
     int connection::proc(node& n, time_t sec, time_t usec) {
+        if (state_t::CONNECTED != state_) {
+            return 0;
+        }
+
         if (NULL != conn_data_.proc_fn) {
             return conn_data_.proc_fn(n, *this, sec, usec);
         }
@@ -120,6 +117,8 @@ namespace atbus {
             conn_data_.shared.mem.len = conf.recv_buffer_size;
             owner_->add_proc_connection(watcher_.lock());
             flags_.set(flag_t::REG_PROC, true);
+            flags_.set(flag_t::ACCESS_SHARE_ADDR, true);
+            flags_.set(flag_t::ACCESS_SHARE_HOST, true);
             state_ = state_t::CONNECTED;
 
             return res;
@@ -145,6 +144,7 @@ namespace atbus {
             conn_data_.shared.shm.len = conf.recv_buffer_size;
             owner_->add_proc_connection(watcher_.lock());
             flags_.set(flag_t::REG_PROC, true);
+            flags_.set(flag_t::ACCESS_SHARE_HOST, true);
             state_ = state_t::CONNECTED;
 
             return res;
@@ -277,6 +277,14 @@ namespace atbus {
 
         if (NULL != owner_) {
             owner_->on_disconnect(this);
+        }
+
+        // 移除proc队列
+        if (flags_.test(flag_t::REG_PROC)) {
+            if (NULL != owner_) {
+                owner_->remove_proc_connection(address_.address);
+            }
+            flags_.set(flag_t::REG_PROC, false);
         }
 
         memset(&conn_data_, 0, sizeof(conn_data_));
