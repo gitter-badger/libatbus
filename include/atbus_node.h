@@ -24,15 +24,7 @@
 
 #include "atbus_endpoint.h"
 
-namespace flatbuffers {
-    class FlatBufferBuilder;
-}
-
 namespace atbus {
-    namespace protocol {
-        struct msg;
-    }
-
     class node: public util::design_pattern::noncopyable {
     public:
         typedef std::shared_ptr<node> ptr_t;
@@ -166,7 +158,7 @@ namespace atbus {
          * @param tid 发送目标ID
          * @param mb 消息构建器
          */
-        int send_msg(bus_id_t tid, flatbuffers::FlatBufferBuilder& mb);
+        int send_msg(bus_id_t tid, atbus::protocol::msg& mb);
 
     public:
         channel::io_stream_channel* get_iostream_channel();

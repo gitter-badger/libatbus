@@ -17,6 +17,8 @@ typedef enum {
     EN_ATBUS_ERR_NOT_INITED                 = -9,   // 未初始化
     EN_ATBUS_ERR_ALREADY_INITED             = -10,  // 已填充初始数据
     EN_ATBUS_ERR_ACCESS_DENY                = -11,  // 不允许的操作
+    EN_ATBUS_ERR_UNPACK                     = -12,  // 解包失败
+    EN_ATBUS_ERR_PACK                       = -13,  // 打包失败
 
     EN_ATBUS_ERR_ATNODE_NOT_FOUND           = -65,  // 查找不到目标节点
     EN_ATBUS_ERR_ATNODE_INVALID_ID          = -66,  // 不可用的ID

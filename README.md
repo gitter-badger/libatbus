@@ -22,8 +22,8 @@ Why not c?
 但是实际使用过程中发现flatbuffer使用上问题有点多（比如有地址对齐问题，动态变更数据有缓冲区限制，string类型预分配了过多缓冲区等等）。
 
 相比之下msgpack兼容性，使用容易程度都好很多。另外虽然我没有针对性的测试，但是据说msgpack的性能大约是protobuf的4倍。
-而且如果支持c++03/c++11的话也可以使用纯header库，这是一大优势。当然它由于不像protobuf那样对整数进行压缩，所以相对而言包体会大一些。
-但是考虑到我们这个lib的实际作用是转发消息，包头和消息体相比非常的小。所以这部分protobuf的空间节约地非常有限。所以相对而言，CPU消耗和平台移植性显得更重要一些。
+而且如果支持c++03/c++11的话也可以使用纯header库，这是一大优势。当然它和protobuf一样存在打包和解包过程所以性能会低于flatbuffer，而且数据维护比较裸露不像protobuf采用了很多COW和ZeroCopy的技术。解包后的逻辑内存结构也会比较大。
+但是考虑到在本lib中的应用，消息体的结构非常简单，并且附加信息很少，所以这些因素的影响都不是很大，反而CPU消耗和平台移植性显得更重要一些。
 
 
 注意
@@ -44,6 +44,6 @@ Linux下 GCC编译安装脚本(支持离线编译安装):
 
 LICENSE
 ------
-libatbus 采用[MIT License](LICENSE)
-MsgPack 采用[Boost Software License, Version 1.0协议](BOOST_LICENSE_1_0.txt)（类似MIT License）
-libuv 采用[Node's license协议](NODE_S_LICENSE)（类似MIT License）
++ libatbus 采用[MIT License](LICENSE)
++ MsgPack 采用[Boost Software License, Version 1.0协议](BOOST_LICENSE_1_0.txt)（类似MIT License）
++ libuv 采用[Node's license协议](NODE_S_LICENSE)（类似MIT License）

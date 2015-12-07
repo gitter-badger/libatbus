@@ -22,6 +22,10 @@
 #include "detail/libatbus_channel_export.h"
 
 namespace atbus {
+    namespace protocol {
+        struct msg;
+    }
+
     class node;
     class endpoint;
 
@@ -148,6 +152,7 @@ namespace atbus {
 
         static int ios_push_fn(connection& conn, const void* buffer, size_t s);
 
+        static bool unpack(connection& conn, atbus::protocol::msg& m, void* buffer, size_t s);
     private:
         state_t::type state_;
         channel::channel_address_t address_;

@@ -6,11 +6,12 @@
 #include <cstring>
 #include <cstdlib>
 
-#include "atbus_proto_generated.h"
-
 #include "detail/buffer.h"
 
 #include "atbus_endpoint.h"
+
+
+#include "detail/libatbus_protocol.h"
 
 namespace atbus {
     endpoint::ptr_t endpoint::create(node* owner, bus_id_t id, uint32_t children_mask, int32_t pid, const std::string& hn) {

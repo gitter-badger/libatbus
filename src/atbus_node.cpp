@@ -17,15 +17,16 @@
 #include <assert.h>
 #include <ctime>
 #include <stdint.h>
+#include <sstream>
 #include <cstddef>
 #include <cstring>
 #include <cstdlib>
 
-#include "atbus_proto_generated.h"
-
 #include "detail/buffer.h"
 
 #include "atbus_node.h"
+
+#include "detail/libatbus_protocol.h"
 
 namespace atbus {
     namespace detail {
@@ -233,37 +234,27 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        flatbuffers::FlatBufferBuilder fbb;
-        protocol::msgBuilder mb(fbb);
+        atbus::protocol::msg m;
+        m.head.cmd = ATBUS_CMD_DATA_TRANSFORM_REQ;
+        m.head.type = type;
+        m.head.ret = 0;
 
-        // header
-        {
-            protocol::msg_headBuilder mhb(fbb);
-            mhb.add_cmd(protocol::CMD_CMD_DATA_TRANSFORM_REQ);
-            mhb.add_ret(0);
-            mhb.add_type(type);
-            mb.add_head(mhb.Finish());
-        }
-        // body
-        {
-            protocol::msg_bodyBuilder mbb(fbb);
-            protocol::forward_dataBuilder mbfdb(fbb);
-            mbfdb.add_from(get_id());
-            mbfdb.add_to(tid);
-            mbfdb.add_content(fbb.CreateVector<int8_t>(reinterpret_cast<const int8_t*>(buffer), s));
-
-            mb.add_body(mbb.Finish());
+        if (NULL == m.body.make_body(m.body.forward)) {
+            return EN_ATBUS_ERR_MALLOC;
         }
 
-        fbb.Finish(mb.Finish());
-        return send_msg(tid, fbb);
+        m.body.forward->from = get_id();
+        m.body.forward->to = tid;
+        m.body.forward->content.ptr = buffer;
+        m.body.forward->content.size = s;
+
+        return send_msg(tid, m);
     }
 
-    int node::send_msg(bus_id_t tid, flatbuffers::FlatBufferBuilder& mb) {
+    int node::send_msg(bus_id_t tid, atbus::protocol::msg& m) {
         if (tid == get_id()) {
             // 发送给自己的数据直接回调数据接口
-            const protocol::msg* m = protocol::Getmsg(mb.GetBufferPointer());
-            on_recv(NULL, m, 0, 0);
+            on_recv(NULL, &m, 0, 0);
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -300,11 +291,19 @@ namespace atbus {
             return EN_ATBUS_ERR_ATNODE_NO_CONNECTION;
         }
 
-        if (mb.GetSize() >= conf_.msg_size) {
+        if (NULL != m.body.forward) {
+            m.body.forward->router.push_back(get_id());
+        }
+
+        std::stringstream ss;
+        msgpack::pack(ss, m);
+        std::string packed_buffer = ss.str();
+
+        if (packed_buffer.size() >= conf_.msg_size) {
             return EN_ATBUS_ERR_BUFF_LIMIT;
         }
 
-        return conn->push(mb.GetBufferPointer(), mb.GetSize());;
+        return conn->push(packed_buffer.data(), packed_buffer.size());;
     }
 
     adapter::loop_t* node::get_evloop() {

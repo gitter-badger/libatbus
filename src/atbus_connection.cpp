@@ -8,12 +8,12 @@
 
 #include "common/string_oprs.h"
 
-#include "atbus_proto_generated.h"
-
 #include "detail/buffer.h"
 
 #include "atbus_node.h"
 #include "atbus_connection.h"
+
+#include "detail/libatbus_protocol.h"
 
 namespace atbus {
     namespace detail {
@@ -379,10 +379,17 @@ namespace atbus {
             return;
         }
 
-        // TODO 要特别注意处理一下地址对齐问题对flatbuffer有无影响
-        // 看flatbuffer代码的话，这部分没有设置对齐，应该会有影响
-        const protocol::msg* m = protocol::Getmsg(buffer);
-        _this->on_recv(conn, m, status, channel->error_code);
+        if (NULL == conn) {
+            _this->on_error(conn->binding_, conn, EN_ATBUS_ERR_UNPACK, EN_ATBUS_ERR_PARAMS);
+            return;
+        }
+
+        // unpack
+        protocol::msg m;
+        if (false == unpack(*conn, m, buffer, s)) {
+            return;
+        }
+        _this->on_recv(conn, &m, status, channel->error_code);
     }
 
     void connection::iostream_on_accepted(channel::io_stream_channel* channel, channel::io_stream_connection* conn_ios, int status, void* buffer, size_t s) {
@@ -449,8 +456,13 @@ namespace atbus {
                 n.on_recv(&conn, NULL, res, res);
                 break;
             } else {
-                const protocol::msg* m = protocol::Getmsg(static_buffer->data());
-                n.on_recv(&conn, m, res, res);
+                // unpack
+                protocol::msg m;
+                if (false == unpack(conn, m, static_buffer->data(), recv_len)) {
+                    continue;
+                }
+
+                n.on_recv(&conn, &m, res, res);
                 ++ret;
             }
         }
@@ -493,8 +505,13 @@ namespace atbus {
                 n.on_recv(&conn, NULL, res, res);
                 break;
             } else {
-                const protocol::msg* m = protocol::Getmsg(static_buffer->data());
-                n.on_recv(&conn, m, res, res);
+                // unpack
+                protocol::msg m;
+                if (false == unpack(conn, m, static_buffer->data(), recv_len)) {
+                    continue;
+                }
+
+                n.on_recv(&conn, &m, res, res);
                 ++ret;
             }
         }
@@ -516,5 +533,18 @@ namespace atbus {
 
     int connection::ios_push_fn(connection& conn, const void* buffer, size_t s) {
         return channel::io_stream_send(conn.conn_data_.shared.ios_fd.conn, buffer, s);
+    }
+
+    bool connection::unpack(connection& conn, atbus::protocol::msg& m, void* buffer, size_t s) {
+        msgpack::unpacked result;
+        msgpack::unpack(result, reinterpret_cast<const char*>(buffer), s);
+        msgpack::object obj = result.get();
+        if (obj.is_nil()) {
+            conn.owner_->on_error(conn.binding_, &conn, EN_ATBUS_ERR_UNPACK, EN_ATBUS_ERR_UNPACK);
+            return false;
+        }
+
+        obj.convert(m);
+        return true;
     }
 }
