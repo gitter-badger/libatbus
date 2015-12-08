@@ -86,10 +86,9 @@ namespace atbus {
 
     private:
         node();
-        static ptr_t create();
 
     public:
-
+        static ptr_t create();
         ~node();
 
         /**
@@ -162,6 +161,8 @@ namespace atbus {
 
     public:
         channel::io_stream_channel* get_iostream_channel();
+
+        inline const endpoint* get_self_endpoint() const { return self_.get(); }
     private:
         adapter::loop_t* get_evloop(); 
         channel::io_stream_conf* get_iostream_conf();

@@ -152,7 +152,7 @@ namespace atbus {
 
         static int ios_push_fn(connection& conn, const void* buffer, size_t s);
 
-        static bool unpack(connection& conn, atbus::protocol::msg& m, void* buffer, size_t s);
+        static bool unpack(void* res, connection& conn, atbus::protocol::msg& m, void* buffer, size_t s);
     private:
         state_t::type state_;
         channel::channel_address_t address_;

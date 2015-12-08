@@ -385,8 +385,9 @@ namespace atbus {
         }
 
         // unpack
+        msgpack::unpacked result;
         protocol::msg m;
-        if (false == unpack(*conn, m, buffer, s)) {
+        if (false == unpack(&result, *conn, m, buffer, s)) {
             return;
         }
         _this->on_recv(conn, &m, status, channel->error_code);
@@ -457,8 +458,9 @@ namespace atbus {
                 break;
             } else {
                 // unpack
+                msgpack::unpacked result;
                 protocol::msg m;
-                if (false == unpack(conn, m, static_buffer->data(), recv_len)) {
+                if (false == unpack(&result, conn, m, static_buffer->data(), recv_len)) {
                     continue;
                 }
 
@@ -506,8 +508,9 @@ namespace atbus {
                 break;
             } else {
                 // unpack
+                msgpack::unpacked result;
                 protocol::msg m;
-                if (false == unpack(conn, m, static_buffer->data(), recv_len)) {
+                if (false == unpack(&result, conn, m, static_buffer->data(), recv_len)) {
                     continue;
                 }
 
@@ -535,10 +538,10 @@ namespace atbus {
         return channel::io_stream_send(conn.conn_data_.shared.ios_fd.conn, buffer, s);
     }
 
-    bool connection::unpack(connection& conn, atbus::protocol::msg& m, void* buffer, size_t s) {
-        msgpack::unpacked result;
-        msgpack::unpack(result, reinterpret_cast<const char*>(buffer), s);
-        msgpack::object obj = result.get();
+    bool connection::unpack(void* res, connection& conn, atbus::protocol::msg& m, void* buffer, size_t s) {
+        msgpack::unpacked* result = reinterpret_cast<msgpack::unpacked*>(res);
+        msgpack::unpack(*result, reinterpret_cast<const char*>(buffer), s);
+        msgpack::object obj = result->get();
         if (obj.is_nil()) {
             conn.owner_->on_error(conn.binding_, &conn, EN_ATBUS_ERR_UNPACK, EN_ATBUS_ERR_UNPACK);
             return false;

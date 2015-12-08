@@ -260,7 +260,12 @@ namespace atbus {
 
         connection* conn = NULL;
         do {
-            // 兄弟节点
+            // 父节点单独判定，由于防止测试兄弟节点
+            if (node_father_.node_ && is_parent_node(tid)) {
+                conn = self_->get_data_connection(node_father_.node_.get());
+            }
+
+            // 兄弟节点(父节点会被判为可能是兄弟节点)
             if (is_brother_node(tid)) {
                 endpoint* target = find_child(node_brother_, tid);
                 if (NULL != target && target->is_child_node(tid)) {

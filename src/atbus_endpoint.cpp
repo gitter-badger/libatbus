@@ -95,7 +95,7 @@ namespace atbus {
 
     endpoint::bus_id_t endpoint::get_children_max_id(bus_id_t id, uint32_t mask) {
         bus_id_t maskv = (1 << mask) - 1;
-        return (id + maskv) & (~maskv);
+        return id | maskv;
     }
 
     bool endpoint::add_connection(connection* conn, bool force_data) {

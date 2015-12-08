@@ -378,7 +378,11 @@ namespace atbus {
             if (channel)
                 *channel = &head->channel;
 
+#ifdef UTIL_STRFUNC_C11_SUPPORT
+            strncpy_s(head->channel.node_magic, sizeof(head->channel.node_magic), MEM_CHANNEL_NAME, sizeof(MEM_CHANNEL_NAME) - 1);
+#else
             strncpy(head->channel.node_magic, MEM_CHANNEL_NAME, sizeof(head->channel.node_magic));
+#endif
             return EN_ATBUS_ERR_SUCCESS;
         }
 

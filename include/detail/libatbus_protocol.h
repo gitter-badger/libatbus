@@ -131,10 +131,23 @@ namespace atbus {
             template<typename TPtr> 
             TPtr* make_body(TPtr*& p) {
                 if (NULL != p) {
-                    delete p;
+                    return p;
                 }
 
                 return p = new TPtr();
+            }
+
+            forward_data* make_forward(ATBUS_MACRO_BUSID_TYPE from, ATBUS_MACRO_BUSID_TYPE to, const void* buffer, size_t s) {
+                forward_data* ret = make_body(forward);
+                if (NULL == ret) {
+                    return ret;
+                }
+
+                ret->from = from;
+                ret->to = to;
+                ret->content.ptr = buffer;
+                ret->content.size = s;
+                return ret;
             }
 
         private:
@@ -155,6 +168,12 @@ namespace atbus {
         struct msg {
             msg_head head;              // map.key = 1
             msg_body body;              // map.key = 2
+
+            void init(ATBUS_PROTOCOL_CMD cmd, int32_t type, int32_t ret) {
+                head.cmd = cmd;
+                head.type = type;
+                head.ret = ret;
+            }
         };
     }
 }
