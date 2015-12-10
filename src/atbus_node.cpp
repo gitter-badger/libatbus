@@ -27,6 +27,7 @@
 #include "atbus_node.h"
 
 #include "detail/libatbus_protocol.h"
+#include <common/string_oprs.h>
 
 namespace atbus {
     namespace detail {
@@ -183,6 +184,13 @@ namespace atbus {
             return EN_ATBUS_ERR_MALLOC;
         }
 
+        // 内存通道和共享内存通道不允许协商握手，必须直接指定endpoint
+        if (0 == UTIL_STRFUNC_STRNCASE_CMP("mem", addr_str, 3)) {
+            return EN_ATBUS_ERR_ACCESS_DENY;
+        } else if (0 == UTIL_STRFUNC_STRNCASE_CMP("shm", addr_str, 3)) {
+            return EN_ATBUS_ERR_ACCESS_DENY;
+        }
+
         int ret = conn->connect(addr_str);
         if (ret < 0) {
             return ret;
@@ -191,6 +199,28 @@ namespace atbus {
         // 添加到检测队列
         add_connection_timer(conn);
         return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    int node::connect(const char* addr_str, endpoint* ep) {
+        if(NULL == ep) {
+            return EN_ATBUS_ERR_PARAMS;
+        }
+
+        connection::ptr_t conn = connection::create(this);
+        if (!conn) {
+            return EN_ATBUS_ERR_MALLOC;
+        }
+
+        int ret = conn->connect(addr_str);
+        if (ret < 0) {
+            return ret;
+        }
+
+        if(ep->add_connection(conn.get(), false)) {
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        return EN_ATBUS_ERR_BAD_DATA;
     }
 
     int node::disconnect(bus_id_t id) {
@@ -309,6 +339,71 @@ namespace atbus {
         }
 
         return conn->push(packed_buffer.data(), packed_buffer.size());;
+    }
+
+    int node::add_endpoint(endpoint::ptr_t ep) {
+        if(!ep) {
+            return EN_ATBUS_ERR_PARAMS;
+        }
+
+        // 父节点单独判定，由于防止测试兄弟节点
+        if (ep->get_children_mask() > self_->get_children_mask() && ep->is_child_node(get_id())) {
+            if (!node_father_.node_) {
+                node_father_.node_ = ep;
+                return EN_ATBUS_ERR_SUCCESS;
+            } else {
+                // 父节点只能有一个
+                return EN_ATBUS_ERR_ATNODE_INVALID_ID;
+            }
+        }
+
+        // 兄弟节点(父节点会被判为可能是兄弟节点)
+        if (is_brother_node(ep->get_id())) {
+            if (insert_child(node_brother_, ep)) {
+                return EN_ATBUS_ERR_SUCCESS;
+            } else {
+                return EN_ATBUS_ERR_ATNODE_INVALID_ID;
+            }
+        }
+
+        // 子节点
+        if (is_child_node(ep->get_id())) {
+            if(insert_child(node_children_, ep)) {
+                return EN_ATBUS_ERR_SUCCESS;
+            } else {
+                return EN_ATBUS_ERR_ATNODE_INVALID_ID;
+            }
+        }
+
+        return EN_ATBUS_ERR_ATNODE_INVALID_ID;
+    }
+
+    int node::remove_endpoint(bus_id_t tid) {
+        // 父节点单独判定，由于防止测试兄弟节点
+        if (is_parent_node(tid)) {
+            node_father_.node_.reset();
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+        // 兄弟节点(父节点会被判为可能是兄弟节点)
+        if (is_brother_node(tid)) {
+            if (remove_child(node_brother_, tid)) {
+                return EN_ATBUS_ERR_SUCCESS;
+            } else {
+                return EN_ATBUS_ERR_ATNODE_NOT_FOUND;
+            }
+        }
+
+        // 子节点
+        if (is_child_node(tid)) {
+            if (remove_child(node_children_, tid)) {
+                return EN_ATBUS_ERR_SUCCESS;
+            } else {
+                return EN_ATBUS_ERR_ATNODE_NOT_FOUND;
+            }
+        }
+
+        return EN_ATBUS_ERR_ATNODE_INVALID_ID;
     }
 
     adapter::loop_t* node::get_evloop() {
@@ -491,6 +586,11 @@ namespace atbus {
 
         // 如果在所有子节点域外则直接添加
         if (iter == coll.end()) {
+            // 有可能这个节点覆盖最后一个
+            if (!coll.empty() && ep->is_child_node(coll.rbegin()->second->get_id())) {
+                return false;
+            }
+
             coll[maskv] = ep;
             return true;
         }
@@ -501,7 +601,7 @@ namespace atbus {
         }
 
         // 如果新节点是老节点的子节点，则失败退出
-        if (iter->second->is_child_node(ep->get_id())) {
+        if (iter->second->is_child_node(ep->get_id()) || ep->is_child_node(iter->second->get_id())) {
             return false;
         }
 

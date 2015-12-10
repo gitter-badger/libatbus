@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
         return res;
     }
 
-    srand(time(NULL));
+    srand(static_cast<uint32_t>(time(NULL)));
 
     size_t sum_recv_len = 0;
     size_t sum_recv_times = 0;

@@ -63,12 +63,12 @@ namespace util {
             if ('0' == str[0] && 'x' == str[1]) { // hex
                 for (size_t i = 2; str[i]; ++i) {
                     char c = static_cast<char>(::tolower(str[i]));
-                    if (str[i] >= '0' && str[i] <= '9') {
+                    if (c >= '0' && c <= '9') {
                         out <<= 4;
-                        out += str[i] - '0';
-                    } else if (str[i] >= 'a' && str[i] <= 'f') {
+                        out += c - '0';
+                    } else if (c >= 'a' && c <= 'f') {
                         out <<= 4;
-                        out += str[i] - 'a' + 10;
+                        out += c - 'a' + 10;
                     } else {
                         break;
                     }

@@ -60,15 +60,41 @@ CASE_TEST(atbus_node, basic_test)
 
 CASE_TEST(atbus_node, child_endpoint_opr)
 {
-    // TODO 插入到末尾
-    // TODO 插入到中间
+    atbus::node::conf_t conf;
+    atbus::node::default_conf(&conf);
+    conf.children_mask = 16;
 
-    // TODO 新端点子域冲突-父子关系
-    // TODO 新端点子域冲突-子父关系
-    // TODO 新端点子域冲突-ID不同子域相同
+    atbus::node::ptr_t node = atbus::node::create();
+    node->init(0x12345678, &conf);
 
-    // TODO 移除失败-找不到
-    // TODO 移除失败-不匹配
-    // TODO 移除成功
+
+    atbus::endpoint::ptr_t ep = atbus::endpoint::create(node.get(), 0x12345679, 8, node->get_pid(), node->get_hostname());
+    // 插入到末尾
+    CASE_EXPECT_EQ(0, node->add_endpoint(ep));
+    CASE_EXPECT_EQ(1, node->get_children().size());
+
+    // 插入到中间
+    ep = atbus::endpoint::create(node.get(), 0x12345589, 8, node->get_pid(), node->get_hostname());
+    CASE_EXPECT_EQ(0, node->add_endpoint(ep));
+    CASE_EXPECT_EQ(2, node->get_children().size());
+
+    // 新端点子域冲突-父子关系
+    ep = atbus::endpoint::create(node.get(), 0x12345680, 4, node->get_pid(), node->get_hostname());
+    CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_INVALID_ID, node->add_endpoint(ep));
+
+    // 新端点子域冲突-子父关系
+    ep = atbus::endpoint::create(node.get(), 0x12345780, 12, node->get_pid(), node->get_hostname());
+    CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_INVALID_ID, node->add_endpoint(ep));
+    ep = atbus::endpoint::create(node.get(), 0x12345480, 12, node->get_pid(), node->get_hostname());
+    CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_INVALID_ID, node->add_endpoint(ep));
+
+    // 新端点子域冲突-ID不同子域相同
+    ep = atbus::endpoint::create(node.get(), 0x12345680, 8, node->get_pid(), node->get_hostname());
+    CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_INVALID_ID, node->add_endpoint(ep));
+
+    // 移除失败-找不到
+    CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_NOT_FOUND, node->remove_endpoint(0x12345680));
+    // 移除成功
+    CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node->remove_endpoint(0x12345589));
 }
 

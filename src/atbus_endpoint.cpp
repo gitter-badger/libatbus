@@ -81,10 +81,11 @@ namespace atbus {
         bus_id_t c_mask = ~((1 << children_mask_) - 1);
         bus_id_t f_mask = ~((1 << father_mask) - 1);
         // 同一父节点下，且子节点域不同
-        return (id & c_mask) != (id_ & c_mask) && (id & f_mask) == (id_ & f_mask);
+        return (id & c_mask) != (id_ & c_mask) && (0 == father_mask || (id & f_mask) == (id_ & f_mask));
     }
 
     bool endpoint::is_parent_node(bus_id_t id, bus_id_t father_id, uint32_t father_mask) {
+        bus_id_t mask = ~((1 << father_mask) - 1);
         return id == father_id;
     }
 

@@ -133,6 +133,14 @@ namespace atbus {
         int connect(const char* addr);
 
         /**
+         * @brief 连接到目标地址
+         * @param addr 连接目标地址
+         * @param ep 连接目标的端点
+         * @return 0或错误码
+         */
+        int connect(const char* addr, endpoint* ep);
+
+        /**
          * @brief 断开到目标的连接
          * @param id 目标ID
          * @return 0或错误码
@@ -156,13 +164,31 @@ namespace atbus {
          * @brief 发送消息
          * @param tid 发送目标ID
          * @param mb 消息构建器
+         * @return 0或错误码
          */
         int send_msg(bus_id_t tid, atbus::protocol::msg& mb);
 
+        /**
+         * @brief 添加目标端点
+         * @param ep 目标端点
+         * @return 0或错误码
+         */
+        int add_endpoint(endpoint::ptr_t ep);
+
+        /**
+         * @brief 移除目标端点
+         * @param tid 目标端点ID
+         * @return 0或错误码
+         */
+        int remove_endpoint(bus_id_t tid);
     public:
         channel::io_stream_channel* get_iostream_channel();
 
         inline const endpoint* get_self_endpoint() const { return self_.get(); }
+
+        inline const endpoint_collection_t& get_children() const { return node_children_; };
+
+        inline const endpoint_collection_t& get_brother() const { return node_brother_; };
     private:
         adapter::loop_t* get_evloop(); 
         channel::io_stream_conf* get_iostream_conf();
