@@ -37,11 +37,20 @@ namespace atbus {
             size_t size;
         };
 
+        struct custom_command_data {
+            ATBUS_MACRO_BUSID_TYPE from;                // ID: 0
+            std::vector<bin_data_block> commands;       // ID: 1
+
+            custom_command_data(): from(0) {}
+
+            MSGPACK_DEFINE(from, commands);
+        };
+
         struct forward_data {
             ATBUS_MACRO_BUSID_TYPE from;                // ID: 0
             ATBUS_MACRO_BUSID_TYPE to;                  // ID: 1
             std::vector<ATBUS_MACRO_BUSID_TYPE> router; // ID: 2
-            bin_data_block content;                        // ID: 3
+            bin_data_block content;                     // ID: 3
 
             forward_data(): from(0), to(0) {}
 
@@ -104,8 +113,9 @@ namespace atbus {
             ping_data* ping;
             reg_data* reg;
             conn_data* conn;
+            custom_command_data* custom;
 
-            msg_body(): forward(NULL), sync(NULL), ping(NULL), reg(NULL), conn(NULL){}
+            msg_body(): forward(NULL), sync(NULL), ping(NULL), reg(NULL), conn(NULL), custom(NULL) {}
             ~msg_body() {
                 if (NULL != forward) {
                     delete forward;
@@ -125,6 +135,10 @@ namespace atbus {
 
                 if (NULL != conn) {
                     delete conn;
+                }
+
+                if (NULL != custom) {
+                    delete custom;
                 }
             }
 
