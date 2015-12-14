@@ -1,5 +1,5 @@
 ﻿/**
- * libatbus.h
+ * atbus_connection.h
  *
  *  Created on: 2015年11月20日
  *      Author: owent
@@ -15,6 +15,8 @@
 #include <list>
 
 #include "std/smart_ptr.h"
+#include "std/explicit_declare.h"
+
 #include "design_pattern/noncopyable.h"
 
 #include "detail/libatbus_error.h"
@@ -29,7 +31,7 @@ namespace atbus {
     class node;
     class endpoint;
 
-    class connection: public util::design_pattern::noncopyable {
+    class connection CLASS_FINAL : public util::design_pattern::noncopyable {
     public:
         typedef std::shared_ptr<connection> ptr_t;
 
@@ -50,6 +52,7 @@ namespace atbus {
                 ACCESS_SHARE_ADDR,  /** 共享内部地址（内存通道的地址共享） **/
                 ACCESS_SHARE_HOST,  /** 共享物理机（共享内存通道的物理机共享） **/
                 RESETTING,          /** 正在执行重置（防止递归死循环） **/
+                DESTRUCTING,        /** 正在执行析构（屏蔽某些接口） **/
                 MAX
             };
         } flag_t;
@@ -127,6 +130,12 @@ namespace atbus {
 
         inline state_t::type get_status() const { return state_; }
         inline bool check_flag(flag_t::type f) const { return flags_.test(f); }
+
+        /**
+         * @brief 获取自身的智能指针
+         * @note 在析构阶段这个接口无效
+         */
+        ptr_t watch() const;
     public:
         static void iostream_on_listen_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
         static void iostream_on_connected_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);

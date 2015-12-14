@@ -22,12 +22,15 @@
 #include <cstring>
 #include <cstdlib>
 
+#include <common/string_oprs.h>
+
 #include "detail/buffer.h"
 
+
+#include "atbus_msg_handler.h"
 #include "atbus_node.h"
 
 #include "detail/libatbus_protocol.h"
-#include <common/string_oprs.h>
 
 namespace atbus {
     namespace detail {
@@ -40,7 +43,10 @@ namespace atbus {
     }
 
     node::node(): state_(state_t::CREATED), ev_loop_(NULL), static_buffer_(NULL) {
-        node_father_.last_action_time_ = 0;
+        event_timer_.sec = 0;
+        event_timer_.usec = 0;
+        event_timer_.node_sync_push = 0;
+        event_timer_.father_opr_time_point = 0;
     }
 
     node::~node() {
@@ -87,6 +93,11 @@ namespace atbus {
         }
 
         self_ = endpoint::create(this, id, conf_.children_mask, get_pid(), get_hostname());
+        if(!self_) {
+            return EN_ATBUS_ERR_MALLOC;
+        }
+        // 复制全局路由表配置
+        self_->set_flag(endpoint::flag_t::GLOBAL_ROUTER, conf_.flags.test(flag_t::EN_CONF_GLOBAL_ROUTER));
 
         static_buffer_ = detail::buffer_block::malloc(conf_.msg_size + detail::buffer_block::head_size(conf_.msg_size) + 16); // 预留crc32长度和vint长度);
 
@@ -96,8 +107,16 @@ namespace atbus {
     }
 
     int node::start() {
-        // TODO 连接父节点
+        // 初始化时间
+        event_timer_.sec = time(NULL);
+
+        // 连接父节点
         if (!conf_.father_address.empty()) {
+            if(!node_father_.node_) {
+                // 如果父节点被激活了，那么父节点操作时间必须更新到非0值，以启用这个功能
+                connect(conf_.father_address.c_str());
+                event_timer_.father_opr_time_point = event_timer_.sec + conf_.first_idle_timeout;
+            }
         }
 
         return 0;
@@ -105,10 +124,10 @@ namespace atbus {
 
     int node::reset() {
         // 这个函数可能会在析构时被调用，这时候不能使用watcher_.lock()
-        if (conf_.flags.test(flag_t::RESETTING)) {
+        if (conf_.flags.test(flag_t::EN_CONF_RESETTING)) {
             return EN_ATBUS_ERR_SUCCESS;
         }
-        conf_.flags.set(flag_t::RESETTING, true);
+        conf_.flags.set(flag_t::EN_CONF_RESETTING, true);
 
         // TODO 所有连接断开
 
@@ -128,12 +147,19 @@ namespace atbus {
         }
         
         node_father_.node_.reset();
-        node_father_.last_action_time_ = 0;
         conf_.flags.reset();
         return EN_ATBUS_ERR_SUCCESS;
     }
 
     int node::proc(time_t sec, time_t usec) {
+        if (sec > event_timer_.sec) {
+            event_timer_.sec = sec;
+            event_timer_.usec = usec;
+        } else if (sec == event_timer_.sec && usec > event_timer_.usec) {
+            event_timer_.usec = usec;
+        }
+        
+
         int ret = 0;
         // TODO 以后可以优化成event_fd通知，这样就不需要轮询了
         // 点对点IO流通道
@@ -150,10 +176,73 @@ namespace atbus {
 
         ret += conf_.loop_times - loop_left;
 
-        // TODO connection超时下线
-        // TODO 父节点重连
-        // TODO Ping包
-        // TODO 同步协议
+        // connection超时下线
+        while (!event_timer_.connecting_list.empty() && event_timer_.connecting_list.front().first < sec) {
+            evt_timer_t::timer_desc_ls<connection::ptr_t>::pair_type& top = event_timer_.connecting_list.front();
+
+            // 已无效对象则忽略
+            if (top.second && false == top.second->is_connected()) {
+                top.second->reset();
+                on_error(NULL, top.second.get(), EN_ATBUS_ERR_NODE_TIMEOUT, 0);
+            }
+
+            event_timer_.connecting_list.pop_front();
+        }
+
+        // 父节点操作
+        if (!conf_.father_address.empty() && 0 != event_timer_.father_opr_time_point && event_timer_.father_opr_time_point < sec) {
+            // 获取命令节点
+            connection* ctl_conn = NULL;
+            if (!node_father_.node_) {
+                ctl_conn = self_->get_ctrl_connection(node_father_.node_.get());
+            }
+
+            // 父节点重连
+            if (NULL == ctl_conn) {
+                int res = connect(conf_.father_address.c_str());
+                if (res < 0) {
+                    on_error(NULL, NULL, res, 0);
+
+                    event_timer_.father_opr_time_point = sec + conf_.retry_interval;
+                } else {
+                    // 下一次判定父节点连接超时再重新连接
+                    event_timer_.father_opr_time_point = sec + conf_.first_idle_timeout;
+                }
+            } else {
+                int res = ping_endpoint(*node_father_.node_);
+                if (res < 0) {
+                    on_error(NULL, NULL, res, 0);
+                }
+
+                // ping包不需要重试
+                event_timer_.father_opr_time_point = sec + conf_.ping_interval;
+            }
+        }
+
+        // Ping包
+        while(!event_timer_.ping_list.empty() && event_timer_.ping_list.front().first < sec) {
+            endpoint::ptr_t ep = event_timer_.ping_list.front().second.lock();
+            event_timer_.ping_list.pop_front();
+
+            // 已移除对象则忽略
+            if (!ep) {
+                // 忽略错误
+                ping_endpoint(*ep);
+                event_timer_.ping_list.push_back(std::make_pair(sec + conf_.ping_interval, ep));
+            }
+        }
+
+        // 节点同步协议-推送
+        if (0 != event_timer_.node_sync_push && event_timer_.node_sync_push < sec) {
+            // 发起子节点同步信息推送
+            int res = push_node_sync();
+            if (res < 0) {
+                event_timer_.node_sync_push = sec + conf_.retry_interval;
+            } else {
+                event_timer_.node_sync_push = 0;
+            }
+        }
+
         return ret;
     }
 
@@ -504,9 +593,30 @@ namespace atbus {
     }
 
     bool node::add_connection_timer(connection::ptr_t conn) {
+        if (!conn) {
+            return false;
+        }
+
+        if (connection::state_t::DISCONNECTED == conn->get_status() || connection::state_t::DISCONNECTING == conn->get_status()) {
+            return false;
+        }
+
         // TODO 是否是正在连接状态
         // TODO 是否在正在连接池中？
+
+        // 如果处于握手阶段，发送节点关系逻辑并加入握手连接池并加入超时判定池
+        if (false == conn->is_connected()) {
+            event_timer_.connecting_list.push_back(std::make_pair(event_timer_.sec + conf_.first_idle_timeout, conn));
+        }
         return true;
+    }
+
+    time_t node::get_timer_sec() const {
+        return event_timer_.sec;
+    }
+
+    time_t node::get_timer_usec() const {
+        return event_timer_.usec;
     }
 
     void node::on_recv(connection* conn, const protocol::msg* m, int status, int errcode) {
@@ -527,8 +637,8 @@ namespace atbus {
             ep = conn->get_binding();
         }
 
-        if (events_.on_error) {
-            events_.on_error(*this, ep, conn, status, errcode);
+        if (event_msg_.on_error) {
+            event_msg_.on_error(*this, ep, conn, status, errcode);
         }
 
         return status;
@@ -549,11 +659,39 @@ namespace atbus {
             return EN_ATBUS_ERR_PARAMS;
         }
 
-        // TODO 如果处于握手阶段，发送节点关系逻辑并加入握手连接池并加入超时判定池
+        add_connection_timer(conn->watch());
+
+        // TODO 发送注册协议
 
         return EN_ATBUS_ERR_SUCCESS;
     }
 
+    int node::ping_endpoint(endpoint& ep) {
+        // 允许跳过未连接或握手完成的endpoint
+        connection* ctl_conn = self_->get_ctrl_connection(&ep);
+        if (NULL == ctl_conn) {
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
+
+
+        // TODO 出错则增加错误计数
+
+        // TODO 检测上一次ping是否返回
+        return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    int node::push_node_sync() {
+        // TODO 防止短时间内批量上报注册协议，所以合并上报数据包
+        
+        // TODO 给所有需要全局路由表的子节点下发数据
+        return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    int node::pull_node_sync() {
+        // TODO 拉取全局节点信息表
+        return EN_ATBUS_ERR_SUCCESS;
+    }
 
     endpoint* node::find_child(endpoint_collection_t& coll, bus_id_t id) {
         // key 保存为子域上界，所以第一个查找的节点要么直接是value，要么是value的子节点

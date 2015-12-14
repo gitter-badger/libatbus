@@ -1,5 +1,5 @@
 ﻿/**
- * libatbus.h
+ * atbus_node.h
  *
  *  Created on: 2015年10月29日
  *      Author: owent
@@ -25,7 +25,7 @@
 #include "atbus_endpoint.h"
 
 namespace atbus {
-    class node: public util::design_pattern::noncopyable {
+    class node CLASS_FINAL : public util::design_pattern::noncopyable {
     public:
         typedef std::shared_ptr<node> ptr_t;
 
@@ -33,7 +33,7 @@ namespace atbus {
         typedef struct {
             enum type {
                 EN_CONF_GLOBAL_ROUTER,                  /** 全局路由表 **/
-                RESETTING,                              /** 正在重置 **/
+                EN_CONF_RESETTING,                      /** 正在重置 **/
                 EN_CONF_MAX
             };
         } flag_t;
@@ -211,6 +211,10 @@ namespace atbus {
 
         bool add_connection_timer(connection::ptr_t conn);
 
+        time_t get_timer_sec() const;
+
+        time_t get_timer_usec() const;
+
         void on_recv(connection* conn, const protocol::msg* m, int status, int errcode);
 
         void on_recv_data(connection* conn, int type, const void* buffer, size_t s) const;
@@ -222,6 +226,11 @@ namespace atbus {
         inline const detail::buffer_block* get_temp_static_buffer() const { return static_buffer_; }
         inline detail::buffer_block* get_temp_static_buffer() { return static_buffer_; }
 
+        int ping_endpoint(endpoint& ep);
+
+        int push_node_sync();
+
+        int pull_node_sync();
     private:
         static endpoint* find_child(endpoint_collection_t& coll, bus_id_t id);
 
@@ -250,8 +259,26 @@ namespace atbus {
             std::function<int(const node&, const endpoint*, int)> on_node_down;
             std::function<int(const node&, const endpoint*, int)> on_node_up;
             std::function<int(const node&, int)> on_invalid_connection;
-        } evt_t;
-        evt_t events_;
+        } evt_msg_t;
+        evt_msg_t event_msg_;
+
+        // ============ 定时器 ============
+        typedef struct {
+            template<typename TObj>
+            struct timer_desc_ls {
+                typedef std::pair<time_t, TObj> pair_type;
+                typedef std::list<pair_type> type;
+            };
+
+            time_t sec;
+            time_t usec;
+
+            time_t node_sync_push;                                          // 节点变更推送
+            time_t father_opr_time_point;                                   // 父节点操作时间（断线重连或Ping）
+            timer_desc_ls<std::weak_ptr<endpoint> >::type ping_list;        // 定时ping
+            timer_desc_ls<connection::ptr_t>::type connecting_list;        // 未完成连接（正在网络连接或握手）
+        } evt_timer_t;
+        evt_timer_t event_timer_;
 
         // 轮训接收通道集
         detail::buffer_block* static_buffer_;
@@ -264,7 +291,6 @@ namespace atbus {
         // 父节点
         struct father_info_t {
             endpoint::ptr_t node_;
-            time_t last_action_time_;
         };
         father_info_t node_father_;
 

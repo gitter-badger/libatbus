@@ -44,6 +44,8 @@ namespace atbus {
     }
 
     connection::~connection() {
+        flags_.set(flag_t::DESTRUCTING, true);
+
         reset();
     }
 
@@ -314,6 +316,14 @@ namespace atbus {
 
     const endpoint* connection::get_binding() const {
         return binding_;
+    }
+
+    connection::ptr_t connection::watch() const {
+        if (flags_.test(flag_t::DESTRUCTING)) {
+            return connection::ptr_t();
+        }
+
+        return watcher_.lock();
     }
 
     void connection::iostream_on_listen_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s) {

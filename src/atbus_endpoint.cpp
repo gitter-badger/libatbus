@@ -168,6 +168,24 @@ namespace atbus {
         return false;
     }
 
+    bool endpoint::get_flag(flag_t::type f) const {
+        if (f >= flag_t::MAX) {
+            return false;
+        }
+
+        return flags_.test(f);
+    }
+
+    int endpoint::set_flag(flag_t::type f, bool v) {
+        if (f >= flag_t::MAX || f < flag_t::MUTABLE_FLAGS) {
+            return EN_ATBUS_ERR_PARAMS;
+        }
+
+        flags_.set(f, v);
+
+        return EN_ATBUS_ERR_SUCCESS;
+    }
+
     bool endpoint::sort_connection_cmp_fn(const connection::ptr_t& left, const connection::ptr_t& right) {
         if (left->check_flag(connection::flag_t::ACCESS_SHARE_ADDR) != right->check_flag(connection::flag_t::ACCESS_SHARE_ADDR)) {
             return left->check_flag(connection::flag_t::ACCESS_SHARE_ADDR);

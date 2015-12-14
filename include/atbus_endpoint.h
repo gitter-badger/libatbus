@@ -1,5 +1,5 @@
 ﻿/**
- * libatbus.h
+ * atbus_endpoint.h
  *
  *  Created on: 2015年11月20日
  *      Author: owent
@@ -13,6 +13,7 @@
 #include <list>
 
 #include "std/smart_ptr.h"
+
 #include "design_pattern/noncopyable.h"
 
 #include "detail/libatbus_error.h"
@@ -36,15 +37,18 @@ namespace atbus {
 
     class node;
 
-    class endpoint: public util::design_pattern::noncopyable {
+    class endpoint CLASS_FINAL : public util::design_pattern::noncopyable {
     public:
         typedef ATBUS_MACRO_BUSID_TYPE bus_id_t;
         typedef std::shared_ptr<endpoint> ptr_t;
 
         typedef struct {
             enum type {
-                RESETTING,          /** 正在执行重置（防止递归死循环） **/
+                RESETTING,                      /** 正在执行重置（防止递归死循环） **/
                 CONNECTION_SORTED,
+
+                MUTABLE_FLAGS,
+                GLOBAL_ROUTER = MUTABLE_FLAGS,  /** 全局路由表 **/
                 MAX
             };
         } flag_t;
@@ -78,6 +82,21 @@ namespace atbus {
 
         bool remove_connection(connection* conn);
 
+        /** 
+         * @brief 获取flag
+         * @param f flag的key
+         * @return 返回f的值，如果f无效，返回false
+         */
+        bool get_flag(flag_t::type f) const;
+
+        /**
+         * @brief 设置可变flag的值
+         * @param f flag的key，这个值必须大于等于flat_t::MUTABLE_FLAGS
+         * @param v 值
+         * @return 0或错误码
+         * @see flat_t
+         */
+        int set_flag(flag_t::type f, bool v);
     private:
         static bool sort_connection_cmp_fn(const connection::ptr_t& left, const connection::ptr_t& right);
 
