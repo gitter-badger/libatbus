@@ -103,6 +103,8 @@ namespace atbus {
 
         ev_loop_ = NULL;
 
+
+        state_ = state_t::INITED;
         return EN_ATBUS_ERR_SUCCESS;
     }
 
@@ -116,7 +118,11 @@ namespace atbus {
                 // 如果父节点被激活了，那么父节点操作时间必须更新到非0值，以启用这个功能
                 connect(conf_.father_address.c_str());
                 event_timer_.father_opr_time_point = event_timer_.sec + conf_.first_idle_timeout;
+
+                state_ = state_t::CONNECTING_PARENT;
             }
+        } else {
+            state_ = state_t::RUNNING;
         }
 
         return 0;
@@ -129,9 +135,34 @@ namespace atbus {
         }
         conf_.flags.set(flag_t::EN_CONF_RESETTING, true);
 
-        // TODO 所有连接断开
+        // 所有连接断开
+        for (detail::auto_select_map<std::string, connection::ptr_t>::type::iterator iter = proc_connections_.begin(); 
+            iter != proc_connections_.end(); ++ iter) {
+            if (iter->second) {
+                iter->second->reset();
+            }
+        }
+        proc_connections_.clear();
 
-        // TODO 销毁endpoint
+        // 销毁endpoint
+        if (node_father_.node_) {
+            node_father_.node_->reset();
+            node_father_.node_.reset();
+        }
+
+        for (endpoint_collection_t::iterator iter = node_brother_.begin(); iter != node_brother_.end(); ++ iter) {
+            if (iter->second) {
+                iter->second->reset();
+            }
+        }
+        node_brother_.clear();
+
+        for (endpoint_collection_t::iterator iter = node_children_.begin(); iter != node_children_.end(); ++iter) {
+            if (iter->second) {
+                iter->second->reset();
+            }
+        }
+        node_children_.clear();
 
         // 基础数据
         iostream_channel_.reset();
@@ -146,8 +177,8 @@ namespace atbus {
             static_buffer_ = NULL;
         }
         
-        node_father_.node_.reset();
         conf_.flags.reset();
+        state_ = state_t::CREATED;
         return EN_ATBUS_ERR_SUCCESS;
     }
 
@@ -207,6 +238,7 @@ namespace atbus {
                 } else {
                     // 下一次判定父节点连接超时再重新连接
                     event_timer_.father_opr_time_point = sec + conf_.first_idle_timeout;
+                    state_ = state_t::CONNECTING_PARENT;
                 }
             } else {
                 int res = ping_endpoint(*node_father_.node_);
@@ -419,19 +451,15 @@ namespace atbus {
             m.body.forward->router.push_back(get_id());
         }
 
-        std::stringstream ss;
-        msgpack::pack(ss, m);
-        std::string packed_buffer = ss.str();
-
-        if (packed_buffer.size() >= conf_.msg_size) {
-            return EN_ATBUS_ERR_BUFF_LIMIT;
-        }
-
-        return conn->push(packed_buffer.data(), packed_buffer.size());;
+        return msg_handler::send_msg(*this, *conn, m);
     }
 
     int node::add_endpoint(endpoint::ptr_t ep) {
         if(!ep) {
+            return EN_ATBUS_ERR_PARAMS;
+        }
+
+        if (this != ep->get_owner()) {
             return EN_ATBUS_ERR_PARAMS;
         }
 
@@ -601,9 +629,6 @@ namespace atbus {
             return false;
         }
 
-        // TODO 是否是正在连接状态
-        // TODO 是否在正在连接池中？
-
         // 如果处于握手阶段，发送节点关系逻辑并加入握手连接池并加入超时判定池
         if (false == conn->is_connected()) {
             event_timer_.connecting_list.push_back(std::make_pair(event_timer_.sec + conf_.first_idle_timeout, conn));
@@ -619,14 +644,46 @@ namespace atbus {
         return event_timer_.usec;
     }
 
-    void node::on_recv(connection* conn, const protocol::msg* m, int status, int errcode) {
+    void node::on_recv(connection* conn, protocol::msg* m, int status, int errcode) {
         if (status < 0 || errcode < 0) {
             on_error(NULL, conn, status, errcode);
+
+            if (NULL != conn) {
+                endpoint* ep = conn->get_binding();
+                if(NULL != ep) {
+                    add_endpoint_fault(*ep);
+                }
+            }
+            return;
         }
 
-        // TODO 内部协议处理
-        // m->head()->cmd();
-        // TODO 消息传递
+        // 内部协议处理
+        int res = msg_handler::dispatch_msg(*this, conn, m, status, errcode);
+        if (res < 0) {
+            if (NULL != conn) {
+                endpoint* ep = conn->get_binding();
+                if (NULL != ep) {
+                    add_endpoint_fault(*ep);
+                }
+            }
+
+            return;
+        }
+
+        if (NULL == m) {
+            return;
+        }
+
+        if (NULL != conn) {
+            endpoint* ep = conn->get_binding();
+            if (NULL != ep) {
+                if (m->head.ret < 0) {
+                    add_endpoint_fault(*ep);
+                } else {
+                    ep->clear_stat_fault();
+                }
+            }
+        }
     }
 
     void node::on_recv_data(connection* conn, int type, const void* buffer, size_t s) const {
@@ -659,25 +716,43 @@ namespace atbus {
             return EN_ATBUS_ERR_PARAMS;
         }
 
+        // 发送注册协议
+        int ret = msg_handler::send_reg(*this, *conn);
+        if (ret < 0) {
+            on_error(NULL, conn, ret, 0);
+            conn->reset();
+            return ret;
+        }
+
+        // 设置超时检测
         add_connection_timer(conn->watch());
-
-        // TODO 发送注册协议
-
         return EN_ATBUS_ERR_SUCCESS;
     }
 
     int node::ping_endpoint(endpoint& ep) {
+        // 检测上一次ping是否返回
+        if (0 != ep.get_stat_ping()) {
+            if (add_endpoint_fault(ep)) {
+                return EN_ATBUS_ERR_ATNODE_FAULT_TOLERANT;
+            }
+        }
+
+
         // 允许跳过未连接或握手完成的endpoint
         connection* ctl_conn = self_->get_ctrl_connection(&ep);
         if (NULL == ctl_conn) {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
+        // 出错则增加错误计数
+        uint32_t ping_seq = msg_seq_alloc_.inc();
+        int res = msg_handler::send_ping(*this, *ctl_conn, ping_seq);
+        if (res < 0) {
+            add_endpoint_fault(ep);
+            return res;
+        }
 
-
-        // TODO 出错则增加错误计数
-
-        // TODO 检测上一次ping是否返回
+        ep.set_stat_ping(ping_seq);
         return EN_ATBUS_ERR_SUCCESS;
     }
 
@@ -691,6 +766,14 @@ namespace atbus {
     int node::pull_node_sync() {
         // TODO 拉取全局节点信息表
         return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    uint32_t node::alloc_msg_seq() {
+        uint32_t ret = 0;
+        while (!ret) {
+            ret = msg_seq_alloc_.inc();
+        }
+        return ret;
     }
 
     endpoint* node::find_child(endpoint_collection_t& coll, bus_id_t id) {
@@ -765,6 +848,16 @@ namespace atbus {
 
         coll.erase(iter);
         return true;
+    }
+
+    bool node::add_endpoint_fault(endpoint& ep) {
+        uint32_t fault_count = ep.add_stat_fault();
+        if (fault_count > conf_.fault_tolerant) {
+            remove_endpoint(ep.get_id());
+            return true;
+        }
+
+        return false;
     }
 
     channel::io_stream_channel* node::get_iostream_channel() {

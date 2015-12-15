@@ -14,9 +14,14 @@
 #include <ctime>
 #include <map>
 
+#ifdef _MSC_VER
+#include <WinSock2.h>
+#endif
+
 #include "std/smart_ptr.h"
 #include "std/functional.h"
 #include "design_pattern/noncopyable.h"
+#include "lock/seq_alloc.h"
 
 #include "detail/libatbus_error.h"
 #include "detail/libatbus_config.h"
@@ -25,6 +30,8 @@
 #include "atbus_endpoint.h"
 
 namespace atbus {
+
+
     class node CLASS_FINAL : public util::design_pattern::noncopyable {
     public:
         typedef std::shared_ptr<node> ptr_t;
@@ -206,6 +213,8 @@ namespace atbus {
         static const std::string& get_hostname();
         static bool set_hostname(const std::string& hn);
 
+        inline const std::list<std::string>& get_listen_list() const { return listen_address_; }
+
         bool add_proc_connection(connection::ptr_t conn);
         bool remove_proc_connection(const std::string& conn_key);
 
@@ -215,7 +224,7 @@ namespace atbus {
 
         time_t get_timer_usec() const;
 
-        void on_recv(connection* conn, const protocol::msg* m, int status, int errcode);
+        void on_recv(connection* conn, protocol::msg* m, int status, int errcode);
 
         void on_recv_data(connection* conn, int type, const void* buffer, size_t s) const;
 
@@ -231,12 +240,20 @@ namespace atbus {
         int push_node_sync();
 
         int pull_node_sync();
+
+        uint32_t alloc_msg_seq();
     private:
         static endpoint* find_child(endpoint_collection_t& coll, bus_id_t id);
 
         static bool insert_child(endpoint_collection_t& coll, endpoint::ptr_t ep);
 
         static bool remove_child(endpoint_collection_t& coll, bus_id_t id);
+
+        /**
+         * @brief 增加错误计数，如果超出容忍值则移除
+         * @return 是否被移除
+         */
+        bool add_endpoint_fault(endpoint& ep);
     private:
         // ============ 基础信息 ============
         // ID
@@ -245,6 +262,7 @@ namespace atbus {
         // 配置
         conf_t conf_;
         std::weak_ptr<node> watcher_; // just like std::shared_from_this<T>
+        util::lock::seq_alloc_u32 msg_seq_alloc_;
 
         // ============ IO事件数据 ============
         std::list<std::string> listen_address_;

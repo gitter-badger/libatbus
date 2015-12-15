@@ -270,6 +270,10 @@ namespace atbus {
             return EN_ATBUS_ERR_NOT_INITED;
         }
 
+        if (state_t::DISCONNECTING == state_) {
+            return EN_ATBUS_ERR_SUCCESS;
+        }
+
         state_ = state_t::DISCONNECTING;
         if (NULL != conn_data_.free_fn) {
             if (NULL != owner_) {
@@ -291,7 +295,7 @@ namespace atbus {
 
         memset(&conn_data_, 0, sizeof(conn_data_));
         state_ = state_t::DISCONNECTED;
-        return 0;
+        return EN_ATBUS_ERR_SUCCESS;
     }
 
     int connection::push(const void* buffer, size_t s) {
@@ -437,7 +441,7 @@ namespace atbus {
             return;
         }
 
-        conn->disconnect();
+        conn->reset();
     }
 
     int connection::shm_proc_fn(node& n, connection& conn, time_t sec, time_t usec) {

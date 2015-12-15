@@ -61,9 +61,6 @@ namespace atbus {
         }
         data_conn_.clear();
 
-        // 从父节点移除
-
-
         flags_.reset();
         // 只要endpoint存在，则它一定存在于owner_的某个位置。
         // 并且这个值只能在创建时指定，所以不能重置这个值
@@ -256,5 +253,33 @@ namespace atbus {
         }
 
         return get_ctrl_connection(ep);
+    }
+
+    endpoint::stat_t::stat_t(): fault_count(0), unfinished_ping(0), ping_delay(0){}
+
+    /** 增加错误计数 **/
+    size_t endpoint::add_stat_fault() {
+        return ++stat_.fault_count;
+    }
+
+    /** 清空错误计数 **/
+    void endpoint::clear_stat_fault() {
+        stat_.fault_count = 0;
+    }
+
+    void endpoint::set_stat_ping(uint32_t p) {
+        stat_.unfinished_ping = p;
+    }
+
+    uint32_t endpoint::get_stat_ping() const {
+        return stat_.unfinished_ping;
+    }
+
+    void endpoint::set_stat_ping_delay(time_t pd) {
+        stat_.ping_delay = pd;
+    }
+
+    time_t endpoint::get_stat_ping_delay() const {
+        return stat_.ping_delay;
     }
 }

@@ -14,6 +14,10 @@
 #include <ctime>
 #include <list>
 
+#ifdef _MSC_VER
+#include <WinSock2.h>
+#endif
+
 #include "std/smart_ptr.h"
 #include "std/explicit_declare.h"
 

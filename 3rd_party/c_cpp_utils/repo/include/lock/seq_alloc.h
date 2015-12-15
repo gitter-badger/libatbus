@@ -171,7 +171,7 @@ namespace util {
             seq_alloc_vc_base() : data_(0) {}
 
             value_type get() const {
-                return InterlockedExchangeAddRelease(const_cast<value_type*>(&data_), 0L);
+                return InterlockedExchangeAddAcquire(const_cast<value_type*>(&data_), 0L);
             }
 
             value_type set(value_type val) {
@@ -223,7 +223,7 @@ namespace util {
             seq_alloc_vc_base() : data_(0) {}
 
             value_type get() const {
-                return InterlockedAddRelease64(const_cast<value_type*>(&data_), 0LL);
+                return InterlockedAddAcquire64(const_cast<value_type*>(&data_), 0LL);
             }
 
             value_type set(value_type val) {

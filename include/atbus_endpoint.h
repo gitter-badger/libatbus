@@ -12,6 +12,10 @@
 
 #include <list>
 
+#ifdef _MSC_VER
+#include <WinSock2.h>
+#endif
+
 #include "std/smart_ptr.h"
 
 #include "design_pattern/noncopyable.h"
@@ -104,6 +108,22 @@ namespace atbus {
         connection* get_ctrl_connection(endpoint* ep) const;
 
         connection* get_data_connection(endpoint* ep) const;
+
+        /** 增加错误计数 **/
+        size_t add_stat_fault();
+
+        /** 清空错误计数 **/
+        void clear_stat_fault();
+
+        void set_stat_ping(uint32_t p);
+
+        uint32_t get_stat_ping() const;
+
+        void set_stat_ping_delay(time_t pd);
+
+        time_t get_stat_ping_delay() const;
+
+        inline const node* get_owner() const { return owner_; }
     private:
         bus_id_t id_;
         uint32_t children_mask_;
@@ -117,6 +137,15 @@ namespace atbus {
 
         connection::ptr_t ctrl_conn_;
         std::list<connection::ptr_t> data_conn_;
+
+        // 统计数据
+        struct stat_t {
+            size_t fault_count;             // 错误容忍计数
+            uint32_t unfinished_ping;       // 上一次未完成的ping的序号
+            time_t ping_delay;
+            stat_t();
+        } ;
+        stat_t stat_;
     };
 }
 

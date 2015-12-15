@@ -12,16 +12,19 @@ enum ATBUS_PROTOCOL_CMD {
 
     //  数据协议
     ATBUS_CMD_DATA_TRANSFORM_REQ = 1,
-    ATBUS_CMD_DATA_TRANSFORM_RSP = 2,
+    ATBUS_CMD_DATA_TRANSFORM_RSP,
+    ATBUS_CMD_CUSTOM_CMD_REQ,
 
     // 节点控制协议
-    ATBUS_CMD_NODE_SYNC_REQ = 33,
-    ATBUS_CMD_NODE_SYNC_RSP = 34,
-    ATBUS_CMD_NODE_REG_REQ = 35,
-    ATBUS_CMD_NODE_REG_RSP = 36,
-    ATBUS_CMD_NODE_CONN_SYN = 38,
-    ATBUS_CMD_NODE_PING = 39,
-    ATBUS_CMD_NODE_PONG = 40
+    ATBUS_CMD_NODE_SYNC_REQ = 9,
+    ATBUS_CMD_NODE_SYNC_RSP,
+    ATBUS_CMD_NODE_REG_REQ,
+    ATBUS_CMD_NODE_REG_RSP,
+    ATBUS_CMD_NODE_CONN_SYN,
+    ATBUS_CMD_NODE_PING,
+    ATBUS_CMD_NODE_PONG,
+
+    ATBUS_CMD_MAX
 };
 
 MSGPACK_ADD_ENUM(ATBUS_PROTOCOL_CMD);
@@ -94,10 +97,13 @@ namespace atbus {
             int32_t pid;                            // ID: 1
             std::string hostname;                   // ID: 2
             std::vector<channel_data> channels;     // ID: 3
+            ATBUS_MACRO_BUSID_TYPE children_id_mask;// ID: 4
+            bool has_global_tree;                   // ID: 5
+            
 
-            reg_data():bus_id(0), pid(0) {}
+            reg_data():bus_id(0), pid(0), children_id_mask(0), has_global_tree(false) {}
 
-            MSGPACK_DEFINE(bus_id, pid, hostname, channels);
+            MSGPACK_DEFINE(bus_id, pid, hostname, channels, children_id_mask, has_global_tree);
         };
 
         struct conn_data {
