@@ -36,7 +36,7 @@
 #define UTIL_STRFUNC_STRNCMP(l, r, s) strncmp(l, r, s)
 #endif
 
-#if (defined(_MSC_VER) && _MSC_VER >= 1600)  || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+#if (defined(_MSC_VER) && _MSC_VER >= 1600)  || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) 
 #define UTIL_STRFUNC_SSCANF(...) sscanf_s(__VA_ARGS__)
 #define UTIL_STRFUNC_SNPRINTF(...) sprintf_s(__VA_ARGS__)
 #define UTIL_STRFUNC_C11_SUPPORT 1

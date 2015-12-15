@@ -70,7 +70,7 @@ namespace util {
 
         char opr_path[MAX_PATH_LEN];
 
-#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L)
         strncpy_s(opr_path, sizeof(opr_path), path, strlen(path));
 #else
         strncpy(opr_path, path, sizeof(opr_path));
@@ -191,7 +191,7 @@ namespace util {
     }
 
     FILE* file_system::open_tmp_file() {
-#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L)
         FILE* ret = NULL;
         if (0 == tmpfile_s(&ret)) {
             return ret;
@@ -199,12 +199,12 @@ namespace util {
 
         return NULL;
 #else
-        return tmpfile(NULL);
+        return tmpfile();
 #endif
     }
 
     std::string file_system::generate_tmp_file_path() {
-#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L)
         char buffer[MAX_PATH_LEN] = {0};
         if(0 == tmpnam_s(buffer, MAX_PATH_LEN)) {
             return buffer;

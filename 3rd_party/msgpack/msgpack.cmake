@@ -19,6 +19,7 @@ endif()
 
 if(NOT MSGPACK_FOUND)
     if(NOT EXISTS ${3RD_PARTY_MSGPACK_PKG_DIR})
+        message(STATUS "mkdir 3RD_PARTY_MSGPACK_PKG_DIR=${3RD_PARTY_MSGPACK_PKG_DIR}")
         file(MAKE_DIRECTORY ${3RD_PARTY_MSGPACK_PKG_DIR})
     endif()
     
@@ -36,9 +37,10 @@ if(NOT MSGPACK_FOUND)
         file(RENAME "${3RD_PARTY_MSGPACK_PKG_DIR}/msgpack-${3RD_PARTY_MSGPACK_VERSION}/include" "${3RD_PARTY_MSGPACK_ROOT_DIR}/include")
     endif()
     
-    set(MSGPACK_INCLUDE_DIRS "${MSGPACK_ROOT}/include")
+    set(MSGPACK_INCLUDE_DIRS "${3RD_PARTY_MSGPACK_ROOT_DIR}/include")
     if (EXISTS ${MSGPACK_INCLUDE_DIRS})
         set(MSGPACK_FOUND YES)
+        set(MSGPACK_ROOT ${3RD_PARTY_MSGPACK_ROOT_DIR})
     endif()
 endif()
 

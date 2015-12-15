@@ -82,7 +82,7 @@ namespace atbus {
     }
 
     bool endpoint::is_parent_node(bus_id_t id, bus_id_t father_id, uint32_t father_mask) {
-        bus_id_t mask = ~((1 << father_mask) - 1);
+        // bus_id_t mask = ~((1 << father_mask) - 1);
         return id == father_id;
     }
 

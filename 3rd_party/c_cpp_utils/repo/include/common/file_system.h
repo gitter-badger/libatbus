@@ -32,11 +32,11 @@
 #include <sys/stat.h>
 #endif
 
-#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) 
 #define UTIL_FS_OPEN(e, f, path, mode) errno_t e = fopen_s(&f, path, mode)
 #else
 #include <errno.h>
-#define UTIL_FS_OPEN(e, f, path, mode) f = fopen(path, mode); errno_t e = errno
+#define UTIL_FS_OPEN(e, f, path, mode) f = fopen(path, mode); int e = errno
 #endif
 
 

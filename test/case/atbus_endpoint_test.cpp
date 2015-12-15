@@ -70,33 +70,37 @@ CASE_TEST(atbus_endpoint, is_brother)
     // 自己不是自己的兄弟节点
     CASE_EXPECT_FALSE(node->get_self_endpoint()->is_brother_node(node->get_id(), fake_mask));
 
-    //       F               F
+    /*       F               F
     //      / \             / \
     //    [A]  B          [A]  F
     //                        / \
     //                       X   B
     // 兄弟节点的子节点仍然是兄弟节点
+    */
     CASE_EXPECT_TRUE(node->get_self_endpoint()->is_brother_node(0x12335678, fake_mask));
 
-    //       B
+    /*       B
     //      / \
     //    [A]  X
     // 父节点是兄弟节点
+    */
     CASE_EXPECT_TRUE(node->get_self_endpoint()->is_brother_node(0x12000001, fake_mask));
     
     
-    //      [A]
+    /*      [A]
     //      / \
     //     B   X
     // 子节点不是兄弟节点
+    */
     CASE_EXPECT_FALSE(node->get_self_endpoint()->is_brother_node(0x12340001, fake_mask));
 
-    //         F
+    /*         F
     //        / \
     //       F   B
     //      / \
     //    [A]  X
     // 父节点的兄弟节点不是兄弟节点
+    */
     CASE_EXPECT_FALSE(node->get_self_endpoint()->is_brother_node(0x11345678, fake_mask));
 
     // 0值判定，无父节点
