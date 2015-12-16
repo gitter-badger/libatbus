@@ -189,7 +189,7 @@ namespace atbus {
             return EN_ATBUS_ERR_CHANNEL_ADDR_INVALID;
         }
 
-        if (0 == UTIL_STRFUNC_STRNCASE_CMP("mem", address_.scheme.c_str(), 3)) {
+        if (0 == UTIL_STRFUNC_STRNCASE_CMP("mem:", address_.scheme.c_str(), 4)) {
             channel::mem_channel* mem_chann = NULL;
             intptr_t ad;
             util::string::str2int(ad, address_.host.c_str());
@@ -211,10 +211,14 @@ namespace atbus {
             conn_data_.shared.mem.buffer = reinterpret_cast<void*>(ad);
             conn_data_.shared.mem.len = conf.recv_buffer_size;
             flags_.set(flag_t::REG_PROC, true);
-            state_ = state_t::CONNECTED;
+            if (NULL == binding_) {
+                state_ = state_t::HANDSHAKING;
+            } else {
+                state_ = state_t::CONNECTED;
+            }
 
             return res;
-        } else if (0 == UTIL_STRFUNC_STRNCASE_CMP("shm", address_.scheme.c_str(), 3)) {
+        } else if (0 == UTIL_STRFUNC_STRNCASE_CMP("shm:", address_.scheme.c_str(), 4)) {
             channel::shm_channel* shm_chann = NULL;
             key_t shm_key;
             util::string::str2int(shm_key, address_.host.c_str());
@@ -237,7 +241,11 @@ namespace atbus {
             conn_data_.shared.shm.len = conf.recv_buffer_size;
 
             flags_.set(flag_t::REG_PROC, true);
-            state_ = state_t::CONNECTED;
+            if (NULL == binding_) {
+                state_ = state_t::HANDSHAKING;
+            } else {
+                state_ = state_t::CONNECTED;
+            }
 
             return res;
         } else {
@@ -330,6 +338,12 @@ namespace atbus {
         return watcher_.lock();
     }
 
+
+    /** 是否正在连接、或者握手或者已连接 **/
+    bool connection::is_running() const {
+        return state_t::CONNECTING == state_ || state_t::HANDSHAKING == state_ || state_t::CONNECTED == state_;
+    }
+
     void connection::iostream_on_listen_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s) {
         detail::connection_async_data* async_data = reinterpret_cast<detail::connection_async_data*>(buffer);
         assert(NULL != async_data);
@@ -367,7 +381,11 @@ namespace atbus {
 
         } else {
             async_data->conn->flags_.set(flag_t::REG_FD, true);
-            async_data->conn->state_ = state_t::HANDSHAKING;
+            if (NULL == async_data->conn->binding_) {
+                async_data->conn->state_ = state_t::HANDSHAKING;
+            } else {
+                async_data->conn->state_ = state_t::CONNECTED;
+            }
 
             async_data->conn->conn_data_.shared.ios_fd.channel = channel;
             async_data->conn->conn_data_.shared.ios_fd.conn = connection;

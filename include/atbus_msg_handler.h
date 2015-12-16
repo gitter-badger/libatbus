@@ -30,7 +30,7 @@ namespace atbus {
 
         static int send_ping(node& n, connection& conn, uint32_t seq);
 
-        static int send_reg(node& n, connection& conn);
+        static int send_reg(int32_t msg_id, node& n, connection& conn, int32_t ret_code);
 
         static int send_msg(node& n, connection& conn, const protocol::msg& m);
 

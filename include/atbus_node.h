@@ -176,6 +176,13 @@ namespace atbus {
         int send_msg(bus_id_t tid, atbus::protocol::msg& mb);
 
         /**
+         * @brief 根据对端ID查找直链的端点
+         * @param tid 目标端点ID
+         * @return 直连的端点，不存在则返回NULL
+         */
+        endpoint* get_endpoint(bus_id_t tid);
+
+        /**
          * @brief 添加目标端点
          * @param ep 目标端点
          * @return 0或错误码
@@ -213,7 +220,7 @@ namespace atbus {
         static const std::string& get_hostname();
         static bool set_hostname(const std::string& hn);
 
-        inline const std::list<std::string>& get_listen_list() const { return listen_address_; }
+        inline const std::list<std::string>& get_listen_list() const { return self_->get_listen(); }
 
         bool add_proc_connection(connection::ptr_t conn);
         bool remove_proc_connection(const std::string& conn_key);
@@ -231,6 +238,9 @@ namespace atbus {
         int on_error(const endpoint*, const connection*, int, int);
         int on_disconnect(const connection*);
         int on_new_connection(connection*);
+        int on_shutdown(int reason);
+
+        int shutdown(int reason);
 
         inline const detail::buffer_block* get_temp_static_buffer() const { return static_buffer_; }
         inline detail::buffer_block* get_temp_static_buffer() { return static_buffer_; }
@@ -242,6 +252,8 @@ namespace atbus {
         int pull_node_sync();
 
         uint32_t alloc_msg_seq();
+
+        void add_check_list(const endpoint::ptr_t& ep);
     private:
         static endpoint* find_child(endpoint_collection_t& coll, bus_id_t id);
 
@@ -265,7 +277,6 @@ namespace atbus {
         util::lock::seq_alloc_u32 msg_seq_alloc_;
 
         // ============ IO事件数据 ============
-        std::list<std::string> listen_address_;
         // 事件分发器
         adapter::loop_t* ev_loop_;
         std::shared_ptr<channel::io_stream_channel> iostream_channel_;
@@ -294,7 +305,8 @@ namespace atbus {
             time_t node_sync_push;                                          // 节点变更推送
             time_t father_opr_time_point;                                   // 父节点操作时间（断线重连或Ping）
             timer_desc_ls<std::weak_ptr<endpoint> >::type ping_list;        // 定时ping
-            timer_desc_ls<connection::ptr_t>::type connecting_list;        // 未完成连接（正在网络连接或握手）
+            timer_desc_ls<connection::ptr_t>::type connecting_list;         // 未完成连接（正在网络连接或握手）
+            std::list<endpoint::ptr_t>  pending_check_list_;                // 待检测列表
         } evt_timer_t;
         evt_timer_t event_timer_;
 

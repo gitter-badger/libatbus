@@ -86,6 +86,12 @@ namespace atbus {
 
         bool remove_connection(connection* conn);
 
+        /**
+         * @brief 是否处于可用状态
+         * @note 可用状态是指同时存在正在运行的命令通道和数据通道
+         */
+        bool is_available() const;
+
         /** 
          * @brief 获取flag
          * @param f flag的key
@@ -101,6 +107,14 @@ namespace atbus {
          * @see flat_t
          */
         int set_flag(flag_t::type f, bool v);
+
+        /**
+         * @breif 获取自身的资源holder
+         */
+        ptr_t watch() const;
+
+        inline const std::list<std::string>& get_listen() const { return listen_address_; }
+        inline void add_listen(const std::string& addr) { listen_address_.push_back(addr); }
     private:
         static bool sort_connection_cmp_fn(const connection::ptr_t& left, const connection::ptr_t& right);
 
@@ -135,6 +149,7 @@ namespace atbus {
         node* owner_;
         std::weak_ptr<endpoint> watcher_;
 
+        std::list<std::string> listen_address_;
         connection::ptr_t ctrl_conn_;
         std::list<connection::ptr_t> data_conn_;
 

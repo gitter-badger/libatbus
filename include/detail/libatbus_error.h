@@ -25,6 +25,7 @@ typedef enum {
     EN_ATBUS_ERR_ATNODE_NO_CONNECTION       = -67,  // 无可用连接
     EN_ATBUS_ERR_ATNODE_FAULT_TOLERANT      = -68,  // 超出容错值
     EN_ATBUS_ERR_ATNODE_INVALID_MSG         = -69,  // 错误的消息
+    EN_ATBUS_ERR_ATNODE_BUS_ID_NOT_MATCH    = -70,  // Bus ID不匹配
 
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
     EN_ATBUS_ERR_CHANNEL_BUFFER_INVALID     = -102, // 缓冲区错误（已被其他模块使用或检测冲突）

@@ -120,8 +120,26 @@ namespace atbus {
             ctrl_conn_ = conn->watcher_.lock();
         }
 
+        // 已经成功连接可以不需要握手
         conn->binding_ = this;
+        if (connection::state_t::HANDSHAKING == conn->get_status()) {
+            conn->state_ = connection::state_t::CONNECTED;
+        }
         return true;
+    }
+
+    bool endpoint::is_available() const {
+        if(!ctrl_conn_) {
+            return false;
+        }
+
+        for (std::list<connection::ptr_t>::const_iterator iter = data_conn_.begin(); iter != data_conn_.end(); ++ iter) {
+            if ((*iter) && (*iter)->is_running()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     bool endpoint::remove_connection(connection* conn) {
@@ -155,6 +173,9 @@ namespace atbus {
                 data_conn_.erase(iter);
 
                 // 数据节点全部离线也直接下线
+                // 内存和共享内存通道不会被动下线
+                // 如果任意tcp通道被动下线或者存在内存或共享内存通道则无需下载
+                // 因为通常来说内存或共享内存通道就是最快的通道
                 if (data_conn_.empty()) {
                     reset();
                 }
@@ -181,6 +202,10 @@ namespace atbus {
         flags_.set(f, v);
 
         return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    endpoint::ptr_t endpoint::watch() const {
+        return watcher_.lock();
     }
 
     bool endpoint::sort_connection_cmp_fn(const connection::ptr_t& left, const connection::ptr_t& right) {

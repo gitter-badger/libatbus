@@ -140,6 +140,9 @@ namespace atbus {
          * @note 在析构阶段这个接口无效
          */
         ptr_t watch() const;
+
+        /** 是否正在连接、或者握手或者已连接 **/
+        bool is_running() const;
     public:
         static void iostream_on_listen_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);
         static void iostream_on_connected_cb(channel::io_stream_channel* channel, channel::io_stream_connection* connection, int status, void* buffer, size_t s);

@@ -164,6 +164,9 @@ namespace atbus {
         }
         node_children_.clear();
 
+        // 清空检测列表
+        event_timer_.pending_check_list_.clear();
+
         // 基础数据
         iostream_channel_.reset();
         iostream_conf_.reset();
@@ -275,6 +278,21 @@ namespace atbus {
             }
         }
 
+
+        // 检测队列
+        if (!event_timer_.pending_check_list_.empty()) {
+            std::list<endpoint::ptr_t> checked;
+            checked.swap(event_timer_.pending_check_list_);
+
+            for (std::list<endpoint::ptr_t>::iterator iter = checked.begin(); iter != checked.end(); ++ iter) {
+                if (*iter) {
+                    if(false == (*iter)->is_available()) {
+                        (*iter)->reset();
+                        remove_endpoint((*iter)->get_id());
+                    }
+                }
+            }
+        }
         return ret;
     }
 
@@ -295,7 +313,7 @@ namespace atbus {
         }
 
         // 记录监听地址
-        listen_address_.push_back(conn->get_address().address);
+        self_->add_listen(conn->get_address().address);
         return EN_ATBUS_ERR_SUCCESS;
     }
 
@@ -337,10 +355,18 @@ namespace atbus {
             return ret;
         }
 
-        if(ep->add_connection(conn.get(), false)) {
-            return EN_ATBUS_ERR_SUCCESS;
+        if (0 == UTIL_STRFUNC_STRNCASE_CMP("mem:", addr_str, 4) ||
+            0 == UTIL_STRFUNC_STRNCASE_CMP("shm:", addr_str, 4)
+            ) {
+            if (ep->add_connection(conn.get(), true)) {
+                return EN_ATBUS_ERR_SUCCESS;
+            }
+        } else {
+            if (ep->add_connection(conn.get(), false)) {
+                return EN_ATBUS_ERR_SUCCESS;
+            }
         }
-
+        
         return EN_ATBUS_ERR_BAD_DATA;
     }
 
@@ -454,6 +480,32 @@ namespace atbus {
         return msg_handler::send_msg(*this, *conn, m);
     }
 
+    endpoint* node::get_endpoint(bus_id_t tid) {
+        if (is_parent_node(tid)) {
+            return node_father_.node_.get();
+        }
+
+        // 直连兄弟节点
+        if (is_brother_node(tid)) {
+            endpoint* res = find_child(node_brother_, tid);
+            if (NULL != res && res->get_id() == tid) {
+                return res;
+            }
+            return NULL;
+        }
+
+        // 直连子节点
+        if (is_child_node(tid)) {
+            endpoint* res = find_child(node_brother_, tid);
+            if (NULL != res && res->get_id() == tid) {
+                return res;
+            }
+            return NULL;
+        }
+
+        return NULL;
+    }
+
     int node::add_endpoint(endpoint::ptr_t ep) {
         if(!ep) {
             return EN_ATBUS_ERR_PARAMS;
@@ -486,6 +538,7 @@ namespace atbus {
         // 子节点
         if (is_child_node(ep->get_id())) {
             if(insert_child(node_children_, ep)) {
+                // TODO 子节点上线上报
                 return EN_ATBUS_ERR_SUCCESS;
             } else {
                 return EN_ATBUS_ERR_ATNODE_INVALID_ID;
@@ -514,6 +567,7 @@ namespace atbus {
         // 子节点
         if (is_child_node(tid)) {
             if (remove_child(node_children_, tid)) {
+                // TODO 子节点下线上报
                 return EN_ATBUS_ERR_SUCCESS;
             } else {
                 return EN_ATBUS_ERR_ATNODE_NOT_FOUND;
@@ -717,7 +771,7 @@ namespace atbus {
         }
 
         // 发送注册协议
-        int ret = msg_handler::send_reg(*this, *conn);
+        int ret = msg_handler::send_reg(ATBUS_CMD_NODE_REG_REQ, *this, *conn, 0);
         if (ret < 0) {
             on_error(NULL, conn, ret, 0);
             conn->reset();
@@ -727,6 +781,17 @@ namespace atbus {
         // 设置超时检测
         add_connection_timer(conn->watch());
         return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    int node::on_shutdown(int reason) {
+        return EN_ATBUS_ERR_SUCCESS;
+    }
+
+    int node::shutdown(int reason) {
+        int ret = on_shutdown(reason);
+
+        reset();
+        return ret;
     }
 
     int node::ping_endpoint(endpoint& ep) {
@@ -774,6 +839,12 @@ namespace atbus {
             ret = msg_seq_alloc_.inc();
         }
         return ret;
+    }
+
+    void node::add_check_list(const endpoint::ptr_t& ep) {
+        if (ep) {
+            event_timer_.pending_check_list_.push_back(ep);
+        }
     }
 
     endpoint* node::find_child(endpoint_collection_t& coll, bus_id_t id) {

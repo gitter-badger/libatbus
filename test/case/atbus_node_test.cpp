@@ -98,3 +98,5 @@ CASE_TEST(atbus_node, child_endpoint_opr)
     CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node->remove_endpoint(0x12345589));
 }
 
+// TODO 主动reset流程测试
+// TODO 被动析构流程测试
