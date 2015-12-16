@@ -116,10 +116,13 @@ namespace atbus {
         if (!conf_.father_address.empty()) {
             if(!node_father_.node_) {
                 // 如果父节点被激活了，那么父节点操作时间必须更新到非0值，以启用这个功能
-                connect(conf_.father_address.c_str());
-                event_timer_.father_opr_time_point = event_timer_.sec + conf_.first_idle_timeout;
-
-                state_ = state_t::CONNECTING_PARENT;
+                if(connect(conf_.father_address.c_str()) >= 0) {
+                    event_timer_.father_opr_time_point = event_timer_.sec + conf_.first_idle_timeout;
+                    state_ = state_t::CONNECTING_PARENT;
+                } else {
+                    event_timer_.father_opr_time_point = event_timer_.sec + conf_.retry_interval;
+                    state_ = state_t::LOST_PARENT;
+                }
             }
         } else {
             state_ = state_t::RUNNING;
@@ -412,9 +415,7 @@ namespace atbus {
         }
 
         atbus::protocol::msg m;
-        m.head.cmd = ATBUS_CMD_DATA_TRANSFORM_REQ;
-        m.head.type = type;
-        m.head.ret = 0;
+        m.init(ATBUS_CMD_DATA_TRANSFORM_REQ, type, 0, alloc_msg_seq());
 
         if (NULL == m.body.make_body(m.body.forward)) {
             return EN_ATBUS_ERR_MALLOC;
@@ -519,6 +520,10 @@ namespace atbus {
         if (ep->get_children_mask() > self_->get_children_mask() && ep->is_child_node(get_id())) {
             if (!node_father_.node_) {
                 node_father_.node_ = ep;
+
+                if (state_t::CONNECTING_PARENT == state_) {
+                    state_ = state_t::RUNNING;
+                }
                 return EN_ATBUS_ERR_SUCCESS;
             } else {
                 // 父节点只能有一个
@@ -552,6 +557,7 @@ namespace atbus {
         // 父节点单独判定，由于防止测试兄弟节点
         if (is_parent_node(tid)) {
             node_father_.node_.reset();
+            state_ = state_t::LOST_PARENT;
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -771,7 +777,7 @@ namespace atbus {
         }
 
         // 发送注册协议
-        int ret = msg_handler::send_reg(ATBUS_CMD_NODE_REG_REQ, *this, *conn, 0);
+        int ret = msg_handler::send_reg(ATBUS_CMD_NODE_REG_REQ, *this, *conn, 0, 0);
         if (ret < 0) {
             on_error(NULL, conn, ret, 0);
             conn->reset();
@@ -922,7 +928,7 @@ namespace atbus {
     }
 
     bool node::add_endpoint_fault(endpoint& ep) {
-        uint32_t fault_count = ep.add_stat_fault();
+        size_t fault_count = ep.add_stat_fault();
         if (fault_count > conf_.fault_tolerant) {
             remove_endpoint(ep.get_id());
             return true;

@@ -45,26 +45,25 @@ namespace atbus {
 
     int msg_handler::send_ping(node& n, connection& conn, uint32_t seq) {
         protocol::msg m;
-        m.init(ATBUS_CMD_NODE_PING, 0, 0);
+        m.init(ATBUS_CMD_NODE_PING, 0, 0, seq);
         protocol::ping_data* ping = m.body.make_body(m.body.ping);
         if (NULL == ping) {
             return EN_ATBUS_ERR_MALLOC;
         }
 
-        ping->ping_id = seq;
         ping->time_point = (n.get_timer_sec() / 1000) * 1000 + (n.get_timer_usec() / 1000) % 1000;
 
         return send_msg(n, conn, m);
     }
 
 
-    int msg_handler::send_reg(int32_t msg_id, node& n, connection& conn, int32_t ret_code) {
+    int msg_handler::send_reg(int32_t msg_id, node& n, connection& conn, int32_t ret_code, uint32_t seq) {
         if (msg_id != ATBUS_CMD_NODE_REG_REQ && msg_id != ATBUS_CMD_NODE_REG_RSP) {
             return EN_ATBUS_ERR_PARAMS;
         }
 
         protocol::msg m;
-        m.init(static_cast<ATBUS_PROTOCOL_CMD>(msg_id), 0, ret_code);
+        m.init(static_cast<ATBUS_PROTOCOL_CMD>(msg_id), 0, ret_code, 0 == seq? n.alloc_msg_seq(): seq);
 
         protocol::reg_data* reg = m.body.make_body(m.body.reg);
         if (NULL == reg) {
@@ -194,7 +193,7 @@ namespace atbus {
             n.add_check_list(new_ep);
         } while (false);
 
-        return send_reg(ATBUS_CMD_NODE_REG_RSP, n, *conn, rsp_code);
+        return send_reg(ATBUS_CMD_NODE_REG_RSP, n, *conn, rsp_code, m.head.sequence);
     }
 
     int msg_handler::on_recv_node_reg_rsp(node& n, connection* conn, protocol::msg& m, int status, int errcode) {
@@ -229,7 +228,8 @@ namespace atbus {
     }
 
     int msg_handler::on_recv_node_ping(node& n, connection* conn, protocol::msg& m, int status, int errcode) {
-        m.init(ATBUS_CMD_NODE_PONG, 0, 0);
+        // 复制sequence
+        m.init(ATBUS_CMD_NODE_PONG, 0, 0, m.head.sequence);
 
         if (NULL != m.body.ping) {
             return EN_ATBUS_ERR_BAD_DATA;
@@ -253,7 +253,7 @@ namespace atbus {
 
         if (NULL != conn) {
             endpoint* ep = conn->get_binding();
-            if (NULL != ep && m.body.ping->ping_id == ep->get_stat_ping()) {
+            if (NULL != ep && m.head.sequence == ep->get_stat_ping()) {
                 ep->set_stat_ping(0);
 
                 time_t time_point = (n.get_timer_sec() / 1000) * 1000 + (n.get_timer_usec() / 1000) % 1000;

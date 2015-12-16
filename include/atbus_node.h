@@ -45,6 +45,7 @@ namespace atbus {
             };
         } flag_t;
 
+        /** 并没有非常复杂的状态切换，所以没有引入状态机 **/
         typedef struct {
             enum type {
                 CREATED = 0,

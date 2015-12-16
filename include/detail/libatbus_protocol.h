@@ -55,7 +55,10 @@ namespace atbus {
             std::vector<ATBUS_MACRO_BUSID_TYPE> router; // ID: 2
             bin_data_block content;                     // ID: 3
 
-            forward_data(): from(0), to(0) {}
+            forward_data(): from(0), to(0) {
+                content.size = 0;
+                content.ptr = NULL;
+            }
 
             MSGPACK_DEFINE(from, to, router, content);
         };
@@ -84,12 +87,11 @@ namespace atbus {
         };
 
         struct ping_data {
-            uint32_t ping_id;                           // ID: 0
-            int64_t time_point;                         // ID: 1
+            int64_t time_point;                         // ID: 0
 
-            ping_data(): ping_id(0), time_point(0) {}
+            ping_data(): time_point(0) {}
 
-            MSGPACK_DEFINE(ping_id, time_point);
+            MSGPACK_DEFINE(time_point);
         };
 
         struct reg_data {
@@ -97,7 +99,7 @@ namespace atbus {
             int32_t pid;                            // ID: 1
             std::string hostname;                   // ID: 2
             std::vector<channel_data> channels;     // ID: 3
-            ATBUS_MACRO_BUSID_TYPE children_id_mask;// ID: 4
+            uint32_t children_id_mask;              // ID: 4
             bool has_global_tree;                   // ID: 5
             
 
@@ -179,20 +181,22 @@ namespace atbus {
             ATBUS_PROTOCOL_CMD cmd;     // ID: 0
             int32_t type;               // ID: 1
             int32_t ret;                // ID: 2
+            uint32_t sequence;          // ID: 3
 
-            msg_head(): cmd(ATBUS_CMD_INVALID), type(0), ret(0) {}
+            msg_head(): cmd(ATBUS_CMD_INVALID), type(0), ret(0), sequence(0) {}
 
-            MSGPACK_DEFINE(cmd, type, ret);
+            MSGPACK_DEFINE(cmd, type, ret, sequence);
         };
 
         struct msg {
             msg_head head;              // map.key = 1
             msg_body body;              // map.key = 2
 
-            void init(ATBUS_PROTOCOL_CMD cmd, int32_t type, int32_t ret) {
+            void init(ATBUS_PROTOCOL_CMD cmd, int32_t type, int32_t ret, uint32_t seq) {
                 head.cmd = cmd;
                 head.type = type;
                 head.ret = ret;
+                head.sequence = seq;
             }
         };
     }

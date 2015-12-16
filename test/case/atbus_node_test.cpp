@@ -26,7 +26,7 @@ CASE_TEST(atbus_node, basic_test)
     char test_buffer[] = "hello world!";
 
     {
-        m_src.init(ATBUS_CMD_DATA_TRANSFORM_REQ, 123, 0);
+        m_src.init(ATBUS_CMD_DATA_TRANSFORM_REQ, 123, 0, 13);
         m_src.body.make_forward(456, 789, test_buffer, sizeof(test_buffer));
         m_src.body.forward->router.push_back(210);
 
@@ -50,6 +50,7 @@ CASE_TEST(atbus_node, basic_test)
         CASE_EXPECT_EQ(ATBUS_CMD_DATA_TRANSFORM_REQ, m_dst.head.cmd);
         CASE_EXPECT_EQ(123, m_dst.head.type);
         CASE_EXPECT_EQ(0, m_dst.head.ret);
+        CASE_EXPECT_EQ(13, m_dst.head.sequence);
 
         CASE_EXPECT_EQ(456, m_dst.body.forward->from);
         CASE_EXPECT_EQ(789, m_dst.body.forward->to);
@@ -100,3 +101,27 @@ CASE_TEST(atbus_node, child_endpoint_opr)
 
 // TODO 主动reset流程测试
 // TODO 被动析构流程测试
+// TODO 注册成功流程测试
+// TODO 注册到父节点失败导致下线的流程测试
+// TODO 注册到子节点失败不会导致下线的流程测试
+
+// TODO 父节点断线重连测试
+// TODO 兄弟节点断线重连测试
+// TODO 子节点断线后重新注册测试
+// TODO 连接过程中的转态检查
+
+// TODO 定时Ping Pong协议测试
+// TODO 自定义命令协议测试
+
+// TODO 父子节点消息转发测试
+// TODO 兄弟节点消息转发测试
+// TODO 兄弟节点通过父节点转发消息并建立直连测试（测试路由）
+// TODO 兄弟节点通过多层父节点转发消息并不会建立直连测试
+// TODO 直连节点发送失败测试
+// TODO 发送给子节点转发失败的回复通知测试
+// TODO 发送给父节点转发失败的回复通知测试
+// TODO 发送给已下线兄弟节点并失败的回复通知测试（网络失败）
+
+
+// TODO 全量表第一次拉取测试
+// TODO 全量表通知给父节点和子节点测试

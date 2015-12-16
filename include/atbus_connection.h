@@ -39,6 +39,7 @@ namespace atbus {
     public:
         typedef std::shared_ptr<connection> ptr_t;
 
+        /** 并没有非常复杂的状态切换，所以没有引入状态机 **/
         typedef struct {
             enum type {
                 DISCONNECTED = 0,   /** 未连接 **/
