@@ -32,6 +32,8 @@ namespace atbus {
 
         static int send_reg(int32_t msg_id, node& n, connection& conn, int32_t ret_code, uint32_t seq);
 
+        static int send_transfer_rsp(node& n, protocol::msg&, int32_t ret_code);
+
         static int send_msg(node& n, connection& conn, const protocol::msg& m);
 
 

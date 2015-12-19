@@ -39,6 +39,8 @@ namespace atbus {
     }
 
     endpoint::~endpoint() {
+        flags_.set(flag_t::DESTRUCTING, true);
+
         reset();
     }
 
@@ -205,6 +207,10 @@ namespace atbus {
     }
 
     endpoint::ptr_t endpoint::watch() const {
+        if(flags_.test(flag_t::DESTRUCTING) || watcher_.expired()) {
+            return endpoint::ptr_t();
+        }
+
         return watcher_.lock();
     }
 

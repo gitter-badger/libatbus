@@ -220,7 +220,7 @@ namespace atbus {
             // 已无效对象则忽略
             if (top.second && false == top.second->is_connected()) {
                 top.second->reset();
-                on_error(NULL, top.second.get(), EN_ATBUS_ERR_NODE_TIMEOUT, 0);
+                ATBUS_FUNC_NODE_ERROR(*this, NULL, top.second.get(), EN_ATBUS_ERR_NODE_TIMEOUT, 0);
             }
 
             event_timer_.connecting_list.pop_front();
@@ -238,7 +238,7 @@ namespace atbus {
             if (NULL == ctl_conn) {
                 int res = connect(conf_.father_address.c_str());
                 if (res < 0) {
-                    on_error(NULL, NULL, res, 0);
+                    ATBUS_FUNC_NODE_ERROR(*this, NULL, NULL, res, 0);
 
                     event_timer_.father_opr_time_point = sec + conf_.retry_interval;
                 } else {
@@ -249,7 +249,7 @@ namespace atbus {
             } else {
                 int res = ping_endpoint(*node_father_.node_);
                 if (res < 0) {
-                    on_error(NULL, NULL, res, 0);
+                    ATBUS_FUNC_NODE_ERROR(*this, NULL, NULL, res, 0);
                 }
 
                 // ping包不需要重试
@@ -415,7 +415,7 @@ namespace atbus {
         }
 
         atbus::protocol::msg m;
-        m.init(ATBUS_CMD_DATA_TRANSFORM_REQ, type, 0, alloc_msg_seq());
+        m.init(get_id(), ATBUS_CMD_DATA_TRANSFORM_REQ, type, 0, alloc_msg_seq());
 
         if (NULL == m.body.make_body(m.body.forward)) {
             return EN_ATBUS_ERR_MALLOC;
@@ -426,28 +426,51 @@ namespace atbus {
         m.body.forward->content.ptr = buffer;
         m.body.forward->content.size = s;
 
-        return send_msg(tid, m);
+        return send_data_msg(tid, m);
     }
 
-    int node::send_msg(bus_id_t tid, atbus::protocol::msg& m) {
+    int node::send_data_msg(bus_id_t tid, atbus::protocol::msg& mb) {
+        return send_data_msg(tid, mb, NULL, NULL);
+    }
+
+    int node::send_data_msg(bus_id_t tid, atbus::protocol::msg& mb, endpoint** ep_out, connection** conn_out) {
+        return send_msg(tid, mb, &endpoint::get_data_connection, ep_out, conn_out);
+    }
+
+    int node::send_ctrl_msg(bus_id_t tid, atbus::protocol::msg& mb) {
+        return send_ctrl_msg(tid, mb, NULL, NULL);
+    }
+
+    int node::send_ctrl_msg(bus_id_t tid, atbus::protocol::msg& mb, endpoint** ep_out, connection** conn_out) {
+        return send_msg(tid, mb, &endpoint::get_ctrl_connection, ep_out, conn_out);
+    }
+
+    int node::send_msg(bus_id_t tid, atbus::protocol::msg& m, endpoint::get_connection_fn_t fn, endpoint** ep_out, connection** conn_out) {
         if (tid == get_id()) {
             // 发送给自己的数据直接回调数据接口
             on_recv(NULL, &m, 0, 0);
             return EN_ATBUS_ERR_SUCCESS;
         }
 
+        #define ASSIGN_EPCONN(tar_var) { \
+            if (NULL != ep_out) *ep_out = tar_var; \
+            if (NULL != conn_out) *conn_out = conn;\
+        }
+
         connection* conn = NULL;
         do {
-            // 父节点单独判定，由于防止测试兄弟节点
+            // 父节点单独判定，防止父节点被判定为兄弟节点
             if (node_father_.node_ && is_parent_node(tid)) {
-                conn = self_->get_data_connection(node_father_.node_.get());
+                conn = (self_.get()->*fn)(node_father_.node_.get());
             }
 
             // 兄弟节点(父节点会被判为可能是兄弟节点)
             if (is_brother_node(tid)) {
                 endpoint* target = find_child(node_brother_, tid);
                 if (NULL != target && target->is_child_node(tid)) {
-                    conn = self_->get_data_connection(target);
+                    conn = (self_.get()->*fn)(target);
+
+                    ASSIGN_EPCONN(target);
                     break;
                 }
                 return EN_ATBUS_ERR_ATNODE_INVALID_ID;
@@ -457,7 +480,9 @@ namespace atbus {
             if (is_child_node(tid)) {
                 endpoint* target = find_child(node_children_, tid);
                 if (NULL != target && target->is_child_node(tid)) {
-                    conn = self_->get_data_connection(target);
+                    conn = (self_.get()->*fn)(target);
+
+                    ASSIGN_EPCONN(target);
                     break;
                 }
                 return EN_ATBUS_ERR_ATNODE_INVALID_ID;
@@ -465,7 +490,9 @@ namespace atbus {
 
             // 其他情况发给父节点
             if (node_father_.node_ && tid == node_father_.node_->get_id()) {
-                conn = self_->get_data_connection(node_father_.node_.get());
+                conn = (self_.get()->*fn)(node_father_.node_.get());
+
+                ASSIGN_EPCONN(node_father_.node_.get());
                 break;
             }
         } while (false);
@@ -478,6 +505,10 @@ namespace atbus {
             m.body.forward->router.push_back(get_id());
         }
 
+        // head 里永远是发起方bus_id
+        m.head.src_bus_id = get_id();
+
+        #undef ASSIGN_EPCONN
         return msg_handler::send_msg(*this, *conn, m);
     }
 
@@ -706,7 +737,7 @@ namespace atbus {
 
     void node::on_recv(connection* conn, protocol::msg* m, int status, int errcode) {
         if (status < 0 || errcode < 0) {
-            on_error(NULL, conn, status, errcode);
+            ATBUS_FUNC_NODE_ERROR(*this, NULL, conn, status, errcode);
 
             if (NULL != conn) {
                 endpoint* ep = conn->get_binding();
@@ -749,7 +780,7 @@ namespace atbus {
     void node::on_recv_data(connection* conn, int type, const void* buffer, size_t s) const {
     }
 
-    int node::on_error(const endpoint* ep, const connection* conn, int status, int errcode) {
+    int node::on_error(const char* file_path, size_t line, const endpoint* ep, const connection* conn, int status, int errcode) {
         if (NULL == ep && NULL != conn) {
             ep = conn->get_binding();
         }
@@ -779,7 +810,7 @@ namespace atbus {
         // 发送注册协议
         int ret = msg_handler::send_reg(ATBUS_CMD_NODE_REG_REQ, *this, *conn, 0, 0);
         if (ret < 0) {
-            on_error(NULL, conn, ret, 0);
+            ATBUS_FUNC_NODE_ERROR(*this, NULL, conn, ret, 0);
             conn->reset();
             return ret;
         }

@@ -178,25 +178,27 @@ namespace atbus {
         };
 
         struct msg_head {
-            ATBUS_PROTOCOL_CMD cmd;     // ID: 0
-            int32_t type;               // ID: 1
-            int32_t ret;                // ID: 2
-            uint32_t sequence;          // ID: 3
+            ATBUS_PROTOCOL_CMD cmd;                 // ID: 0
+            int32_t type;                           // ID: 1
+            int32_t ret;                            // ID: 2
+            uint32_t sequence;                      // ID: 3
+            ATBUS_MACRO_BUSID_TYPE src_bus_id;      // ID: 4
 
             msg_head(): cmd(ATBUS_CMD_INVALID), type(0), ret(0), sequence(0) {}
 
-            MSGPACK_DEFINE(cmd, type, ret, sequence);
+            MSGPACK_DEFINE(cmd, type, ret, sequence, src_bus_id);
         };
 
         struct msg {
             msg_head head;              // map.key = 1
             msg_body body;              // map.key = 2
 
-            void init(ATBUS_PROTOCOL_CMD cmd, int32_t type, int32_t ret, uint32_t seq) {
+            void init(ATBUS_MACRO_BUSID_TYPE src_bus_id, ATBUS_PROTOCOL_CMD cmd, int32_t type, int32_t ret, uint32_t seq) {
                 head.cmd = cmd;
                 head.type = type;
                 head.ret = ret;
                 head.sequence = seq;
+                head.src_bus_id = src_bus_id;
             }
         };
     }

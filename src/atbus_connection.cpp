@@ -331,7 +331,7 @@ namespace atbus {
     }
 
     connection::ptr_t connection::watch() const {
-        if (flags_.test(flag_t::DESTRUCTING)) {
+        if (flags_.test(flag_t::DESTRUCTING) || watcher_.expired()) {
             return connection::ptr_t();
         }
 
@@ -352,7 +352,7 @@ namespace atbus {
         }
 
         if (status < 0) {
-            async_data->owner_node->on_error(async_data->conn->binding_, async_data->conn.get(), status, channel->error_code);
+            ATBUS_FUNC_NODE_ERROR(*async_data->owner_node, async_data->conn->binding_, async_data->conn.get(), status, channel->error_code);
             async_data->conn->state_ = state_t::DISCONNECTED;
 
         } else {
@@ -376,7 +376,7 @@ namespace atbus {
         }
 
         if (status < 0) {
-            async_data->owner_node->on_error(async_data->conn->binding_, async_data->conn.get(), status, channel->error_code);
+            ATBUS_FUNC_NODE_ERROR(*async_data->owner_node, async_data->conn->binding_, async_data->conn.get(), status, channel->error_code);
             async_data->conn->state_ = state_t::DISCONNECTED;
 
         } else {
@@ -412,7 +412,7 @@ namespace atbus {
         }
 
         if (NULL == conn) {
-            _this->on_error(conn->binding_, conn, EN_ATBUS_ERR_UNPACK, EN_ATBUS_ERR_PARAMS);
+            ATBUS_FUNC_NODE_ERROR(*_this, conn->binding_, conn, EN_ATBUS_ERR_UNPACK, EN_ATBUS_ERR_PARAMS);
             return;
         }
 
@@ -467,7 +467,7 @@ namespace atbus {
         size_t left_times = n.get_conf().loop_times;
         detail::buffer_block* static_buffer = n.get_temp_static_buffer();
         if (NULL == static_buffer) {
-            return n.on_error(NULL, &conn, EN_ATBUS_ERR_NOT_INITED, 0);
+            return ATBUS_FUNC_NODE_ERROR(n, NULL, &conn, EN_ATBUS_ERR_NOT_INITED, 0);
         }
 
         while (left_times-- > 0) {
@@ -517,7 +517,7 @@ namespace atbus {
         size_t left_times = n.get_conf().loop_times;
         detail::buffer_block* static_buffer = n.get_temp_static_buffer();
         if (NULL == static_buffer) {
-            return n.on_error(NULL, &conn, EN_ATBUS_ERR_NOT_INITED, 0);
+            return ATBUS_FUNC_NODE_ERROR(n, NULL, &conn, EN_ATBUS_ERR_NOT_INITED, 0);
         }
 
         while (left_times-- > 0) {
@@ -575,7 +575,7 @@ namespace atbus {
         msgpack::unpack(*result, reinterpret_cast<const char*>(buffer), s);
         msgpack::object obj = result->get();
         if (obj.is_nil()) {
-            conn.owner_->on_error(conn.binding_, &conn, EN_ATBUS_ERR_UNPACK, EN_ATBUS_ERR_UNPACK);
+            ATBUS_FUNC_NODE_ERROR(*conn.owner_, conn.binding_, &conn, EN_ATBUS_ERR_UNPACK, EN_ATBUS_ERR_UNPACK);
             return false;
         }
 

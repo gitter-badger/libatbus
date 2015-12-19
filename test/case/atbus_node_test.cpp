@@ -26,7 +26,7 @@ CASE_TEST(atbus_node, basic_test)
     char test_buffer[] = "hello world!";
 
     {
-        m_src.init(ATBUS_CMD_DATA_TRANSFORM_REQ, 123, 0, 13);
+        m_src.init(0x12345678, ATBUS_CMD_DATA_TRANSFORM_REQ, 123, 0, 13);
         m_src.body.make_forward(456, 789, test_buffer, sizeof(test_buffer));
         m_src.body.forward->router.push_back(210);
 
@@ -51,6 +51,7 @@ CASE_TEST(atbus_node, basic_test)
         CASE_EXPECT_EQ(123, m_dst.head.type);
         CASE_EXPECT_EQ(0, m_dst.head.ret);
         CASE_EXPECT_EQ(13, m_dst.head.sequence);
+        CASE_EXPECT_EQ(0x12345678, m_dst.head.src_bus_id);
 
         CASE_EXPECT_EQ(456, m_dst.body.forward->from);
         CASE_EXPECT_EQ(789, m_dst.body.forward->to);

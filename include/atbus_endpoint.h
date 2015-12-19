@@ -50,12 +50,15 @@ namespace atbus {
             enum type {
                 RESETTING,                      /** 正在执行重置（防止递归死循环） **/
                 CONNECTION_SORTED,
+                DESTRUCTING,                    /** 正在执行析构 **/
 
                 MUTABLE_FLAGS,
                 GLOBAL_ROUTER = MUTABLE_FLAGS,  /** 全局路由表 **/
                 MAX
             };
         } flag_t;
+
+        typedef connection* (endpoint::*get_connection_fn_t)(endpoint* ep) const;
 
     private:
         endpoint();

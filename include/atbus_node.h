@@ -169,12 +169,52 @@ namespace atbus {
         int send_data(bus_id_t tid, int type, const void* buffer, size_t s);
 
         /**
-         * @brief 发送消息
+         * @brief 发送数据消息
          * @param tid 发送目标ID
          * @param mb 消息构建器
          * @return 0或错误码
          */
-        int send_msg(bus_id_t tid, atbus::protocol::msg& mb);
+        int send_data_msg(bus_id_t tid, atbus::protocol::msg& mb);
+
+        /**
+         * @brief 发送数据消息
+         * @param tid 发送目标ID
+         * @param mb 消息构建器
+         * @param ep_out 如果发送成功，导出发送目标
+         * @param conn_out 如果发送成功，导出发送连接
+         * @return 0或错误码
+         */
+        int send_data_msg(bus_id_t tid, atbus::protocol::msg& mb, endpoint** ep_out, connection** conn_out);
+
+        /**
+         * @brief 发送控制消息
+         * @param tid 发送目标ID
+         * @param mb 消息构建器
+         * @return 0或错误码
+         */
+        int send_ctrl_msg(bus_id_t tid, atbus::protocol::msg& mb);
+
+
+        /**
+         * @brief 发送控制消息
+         * @param tid 发送目标ID
+         * @param mb 消息构建器
+         * @param ep_out 如果发送成功，导出发送目标
+         * @param conn_out 如果发送成功，导出发送连接
+         * @return 0或错误码
+         */
+        int send_ctrl_msg(bus_id_t tid, atbus::protocol::msg& mb, endpoint** ep_out, connection** conn_out);
+
+        /**
+         * @brief 发送消息
+         * @param tid 发送目标ID
+         * @param mb 消息构建器
+         * @param fn 获取有效连接的接口
+         * @param ep_out 如果发送成功，导出发送目标
+         * @param conn_out 如果发送成功，导出发送连接
+         * @return 0或错误码
+         */
+        int send_msg(bus_id_t tid, atbus::protocol::msg& mb, endpoint::get_connection_fn_t fn, endpoint** ep_out, connection** conn_out);
 
         /**
          * @brief 根据对端ID查找直链的端点
@@ -200,6 +240,8 @@ namespace atbus {
         channel::io_stream_channel* get_iostream_channel();
 
         inline const endpoint* get_self_endpoint() const { return self_.get(); }
+
+        inline const endpoint* get_parent_endpoint() const { return node_father_.node_.get(); }
 
         inline const endpoint_collection_t& get_children() const { return node_children_; };
 
@@ -236,7 +278,7 @@ namespace atbus {
 
         void on_recv_data(connection* conn, int type, const void* buffer, size_t s) const;
 
-        int on_error(const endpoint*, const connection*, int, int);
+        int on_error(const char* file_path, size_t line, const endpoint*, const connection*, int, int);
         int on_disconnect(const connection*);
         int on_new_connection(connection*);
         int on_shutdown(int reason);
@@ -336,5 +378,8 @@ namespace atbus {
         // 统计信息
     };
 }
+
+
+#define ATBUS_FUNC_NODE_ERROR(n, ep, conn, status, errorcode) (n).on_error(__FILE__, __LINE__, (ep), (conn), (status), (errorcode))
 
 #endif /* LIBATBUS_NODE_H_ */
