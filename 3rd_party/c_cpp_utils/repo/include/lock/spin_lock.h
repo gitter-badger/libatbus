@@ -28,13 +28,17 @@
 # pragma once
 #endif
 
+#include <cstddef>
+#if defined(__cplusplus) && __cplusplus >= 201103L
+    #include <atomic>
+    #define __UTIL_LOCK_SPINLOCK_ATOMIC_STD
 #if defined(__clang__) && (__clang_major__ > 3 || (__clang_major__ == 3 && __clang_minor__ >= 1 ) ) && __cplusplus >= 201103L
     #include <atomic>
     #define __UTIL_LOCK_SPINLOCK_ATOMIC_STD
 #elif defined(_MSC_VER) && (_MSC_VER > 1700 || (defined(_HAS_CPP0X) && _HAS_CPP0X))
     #include <atomic>
     #define __UTIL_LOCK_SPINLOCK_ATOMIC_STD
-#elif defined(__GNUC__) && ((__GNUC__ == 4 && __GNUC_MINOR__ >= 5) || __GNUC__ > 4) && (__cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__))
+#elif defined(__GNUC__) && ((__GNUC__ == 4 && __GNUC_MINOR__ >= 5) || __GNUC__ > 4) && defined(__GXX_EXPERIMENTAL_CXX0X__)
     #include <atomic>
     #define __UTIL_LOCK_SPINLOCK_ATOMIC_STD
 #endif
