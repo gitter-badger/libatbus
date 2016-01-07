@@ -40,6 +40,7 @@ namespace atbus {
             return EN_ATBUS_ERR_ATNODE_INVALID_MSG;
         }
 
+        n.stat_add_dispatch_times();
         return fns[m->head.cmd](n, conn, *m, status, errcode);
     }
 
@@ -112,7 +113,7 @@ namespace atbus {
         }
 
         if (m.body.forward->to == n.get_id()) {
-            n.on_recv(conn, &m, status, errcode);
+            n.on_recv_data(conn, m.head.type, m.body.forward->content.ptr, m.body.forward->content.size);
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -191,8 +192,19 @@ namespace atbus {
         return EN_ATBUS_ERR_SUCCESS;
     }
 
-    int msg_handler::on_recv_custom_cmd_req(node& n, connection* conn, protocol::msg&, int status, int errcode) {
-        return EN_ATBUS_ERR_SUCCESS;
+    int msg_handler::on_recv_custom_cmd_req(node& n, connection* conn, protocol::msg& m, int status, int errcode) {
+        if (NULL == m.body.custom) {
+            ATBUS_FUNC_NODE_ERROR(n, NULL == conn ? NULL : conn->get_binding(), conn, EN_ATBUS_ERR_BAD_DATA, 0);
+            return EN_ATBUS_ERR_BAD_DATA;
+        }
+
+        std::vector<std::pair<const void*, size_t> > cmd_args;
+        cmd_args.reserve(m.body.custom->commands.size());
+        for (size_t i = 0; i < m.body.custom->commands.size(); ++i) {
+            cmd_args.push_back(std::make_pair(m.body.custom->commands[i].ptr, m.body.custom->commands[i].size));
+        }
+
+        return n.on_custom_cmd(NULL == conn ? NULL : conn->get_binding(), conn, m.body.custom->from, cmd_args);
     }
 
     int msg_handler::on_recv_node_sync_req(node& n, connection* conn, protocol::msg&, int status, int errcode) {
@@ -223,6 +235,7 @@ namespace atbus {
                     break;
                 }
 
+                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "connection already connected recv req");
                 break;
             }
 
@@ -230,11 +243,13 @@ namespace atbus {
             ep = n.get_endpoint(m.body.reg->bus_id);
             if (NULL != ep) {
                 // 有共享物理机限制的连接只能加为数据节点（一般就是内存通道或者共享内存通道）
-                res = ep->add_connection(conn, conn->check_flag(connection::flag_t::ACCESS_SHARE_HOST));
-                if (res < 0) {
+                if (false == ep->add_connection(conn, conn->check_flag(connection::flag_t::ACCESS_SHARE_HOST))) {
+                    res = EN_ATBUS_ERR_ATNODE_NO_CONNECTION;
                     ATBUS_FUNC_NODE_ERROR(n, ep, conn, res, 0);
                 }
                 rsp_code = res;
+
+                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "connection added to existed endpoint, ret code %d", res);
                 break;
             }
 
@@ -242,6 +257,8 @@ namespace atbus {
             if (n.is_child_node(m.body.reg->bus_id)) {
                 if(m.body.reg->has_global_tree && false == n.get_self_endpoint()->get_flag(endpoint::flag_t::GLOBAL_ROUTER)) {
                     rsp_code = EN_ATBUS_ERR_ACCESS_DENY;
+
+                    ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "self has no global tree, children reg access deny");
                     break;
                 }
             }
@@ -263,6 +280,7 @@ namespace atbus {
             }
             ep->set_flag(endpoint::flag_t::GLOBAL_ROUTER, m.body.reg->has_global_tree);
 
+            ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node add a new endpoint, ret code: %d", res);
             // 新的endpoint要建立所有连接
             ep->add_connection(conn, false);
             for (size_t i = 0; i < m.body.reg->channels.size(); ++i) {
@@ -292,20 +310,22 @@ namespace atbus {
             return EN_ATBUS_ERR_BAD_DATA;
         }
 
+        endpoint* ep = conn->get_binding();
+        n.on_reg(ep, conn, m.head.ret);
+
         if (m.head.ret < 0) {
-            endpoint* ep = conn->get_binding();
             if (NULL == ep) {
                 n.add_check_list(ep->watch());
             }
 
             ATBUS_FUNC_NODE_ERROR(n, ep, conn, m.head.ret, errcode);
 
-            // 如果是父节点回的错误注册包，则要关闭进程
+            // 如果是父节点回的错误注册包，且未被激活过，则要关闭进程
+            conn->disconnect();
             if (conn->get_address().address == n.get_conf().father_address) {
-                conn->disconnect();
-                n.shutdown(m.head.ret);
-            } else {
-                conn->disconnect();
+                if (!n.check(node::flag_t::EN_FT_ACTIVED)) {
+                    n.shutdown(m.head.ret);
+                }
             }
             
             return m.head.ret;

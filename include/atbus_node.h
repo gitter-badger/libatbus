@@ -37,16 +37,15 @@ namespace atbus {
         typedef std::shared_ptr<node> ptr_t;
 
         typedef ATBUS_MACRO_BUSID_TYPE bus_id_t;
-        typedef struct {
+        struct conf_flag_t {
             enum type {
                 EN_CONF_GLOBAL_ROUTER,                  /** 全局路由表 **/
-                EN_CONF_RESETTING,                      /** 正在重置 **/
                 EN_CONF_MAX
             };
-        } flag_t;
+        };
 
         /** 并没有非常复杂的状态切换，所以没有引入状态机 **/
-        typedef struct {
+        struct state_t {
             enum type {
                 CREATED = 0,
                 INITED,
@@ -55,12 +54,20 @@ namespace atbus {
                 RUNNING,
                 CLOSING,
             };
-        } state_t;
+        };
+
+        struct flag_t {
+            enum type {
+                EN_FT_RESETTING,                /** 正在重置 **/
+                EN_FT_ACTIVED,                  /** 已激活 **/
+                EN_FT_MAX,                      /** 正在重置 **/
+            };
+        };
 
         typedef struct {
             adapter::loop_t* ev_loop;
             uint32_t children_mask;                     /** 子节点掩码 **/
-            std::bitset<flag_t::EN_CONF_MAX> flags;     /** 开关配置 **/
+            std::bitset<conf_flag_t::EN_CONF_MAX> flags;/** 开关配置 **/
             std::string father_address;                 /** 父节点地址 **/
             int loop_times;                             /** 消息循环次数限制，防止某些通道繁忙把其他通道堵死 **/
             int ttl;                                    /** 消息转发跳转限制 **/
@@ -80,6 +87,24 @@ namespace atbus {
         } conf_t;
 
         typedef std::map<bus_id_t, endpoint::ptr_t> endpoint_collection_t;
+
+        struct evt_msg_t {
+            typedef std::function<int(const node&, const endpoint&, const connection&, int, const void*, size_t)> on_recv_msg_fn_t;
+            typedef std::function<int(const node&, const endpoint*, const connection*, int, int)> on_error_fn_t;
+            typedef std::function<int(const node&, const endpoint*, const connection*, int)> on_reg_fn_t;
+            typedef std::function<int(const node&, int)> on_node_down_fn_t;
+            typedef std::function<int(const node&, int)> on_node_up_fn_t;
+            typedef std::function<int(const node&, const connection*, int)> on_invalid_connection_fn_t;
+            typedef std::function<int(const node&, const endpoint*, const connection*, bus_id_t, const std::vector<std::pair<const void*, size_t> >&)> on_custom_cmd_fn_t;
+
+            on_recv_msg_fn_t on_recv_msg;
+            on_error_fn_t on_error;
+            on_reg_fn_t on_reg;
+            on_node_down_fn_t on_node_down;
+            on_node_up_fn_t on_node_up;
+            on_invalid_connection_fn_t on_invalid_connection;
+            on_custom_cmd_fn_t on_custom_cmd;
+        } ;
 
         // ================== 用这个来取代C++继承，减少层次结构 ==================
         struct no_stream_channel_t {
@@ -253,6 +278,10 @@ namespace atbus {
     public:
         inline bus_id_t get_id() const { return self_->get_id(); }
         inline const conf_t& get_conf() const { return conf_; }
+
+        inline bool check(flag_t::type f) const { return flags_.test(f); }
+        inline state_t::type get_state() const { return state_; }
+
         ptr_t get_watcher();
 
         bool is_child_node(bus_id_t id) const;
@@ -282,6 +311,9 @@ namespace atbus {
         int on_disconnect(const connection*);
         int on_new_connection(connection*);
         int on_shutdown(int reason);
+        int on_reg(const endpoint*, const connection*, int);
+        int on_actived();
+        int on_custom_cmd(const endpoint*, const connection*, bus_id_t from, const std::vector<std::pair<const void*, size_t> >& cmd_args);
 
         int shutdown(int reason);
 
@@ -297,6 +329,9 @@ namespace atbus {
         uint32_t alloc_msg_seq();
 
         void add_check_list(const endpoint::ptr_t& ep);
+
+        void set_on_recv_handle(evt_msg_t::on_recv_msg_fn_t fn);
+        evt_msg_t::on_recv_msg_fn_t get_on_recv_handle() const;
     private:
         static endpoint* find_child(endpoint_collection_t& coll, bus_id_t id);
 
@@ -309,11 +344,22 @@ namespace atbus {
          * @return 是否被移除
          */
         bool add_endpoint_fault(endpoint& ep);
+
+        /**
+         * @brief 添加到ping列表
+         */
+        void add_ping_timer(endpoint::ptr_t& ep);
+
+    public:
+        void stat_add_dispatch_times();
+
     private:
         // ============ 基础信息 ============
         // ID
         endpoint::ptr_t self_;
         state_t::type state_;
+        std::bitset<flag_t::EN_FT_MAX> flags_;
+
         // 配置
         conf_t conf_;
         std::weak_ptr<node> watcher_; // just like std::shared_from_this<T>
@@ -324,14 +370,6 @@ namespace atbus {
         adapter::loop_t* ev_loop_;
         std::shared_ptr<channel::io_stream_channel> iostream_channel_;
         std::unique_ptr<channel::io_stream_conf> iostream_conf_;
-        typedef struct {
-            std::function<int(const node&, const endpoint&, const connection&, int, const void*, size_t)> on_recv_msg;
-            std::function<int(const node&, const endpoint*, const connection*, int, int)> on_error;
-            std::function<int(const node&, int)> on_reg;
-            std::function<int(const node&, const endpoint*, int)> on_node_down;
-            std::function<int(const node&, const endpoint*, int)> on_node_up;
-            std::function<int(const node&, int)> on_invalid_connection;
-        } evt_msg_t;
         evt_msg_t event_msg_;
 
         // ============ 定时器 ============
@@ -376,10 +414,27 @@ namespace atbus {
         // 全局路由表
 
         // 统计信息
+        struct stat_info_t {
+            size_t dispatch_times;
+
+            stat_info_t();
+        };
+        stat_info_t stat_;
+
+        // 调试辅助函数
+    public:
+        void (*on_debug)(const char* file_path, size_t line, const node&, const endpoint*, const connection*, const char* fmt, ...);
     };
 }
 
 
 #define ATBUS_FUNC_NODE_ERROR(n, ep, conn, status, errorcode) (n).on_error(__FILE__, __LINE__, (ep), (conn), (status), (errorcode))
+
+#ifdef _MSC_VER
+#define ATBUS_FUNC_NODE_DEBUG(n, ep, conn, fmt, ...) if ((n).on_debug) { (n).on_debug(__FILE__, __LINE__, (n), (ep), (conn), fmt, __VA_ARGS__); }
+#else
+#define ATBUS_FUNC_NODE_DEBUG(n, ep, conn, fmt, args...) if ((n).on_debug) { (n).on_debug(__FILE__, __LINE__, (n), (ep), (conn), fmt, ##args); }
+#endif
+
 
 #endif /* LIBATBUS_NODE_H_ */

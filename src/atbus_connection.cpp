@@ -40,6 +40,8 @@ namespace atbus {
 
         ret->owner_ = owner;
         ret->watcher_ = ret;
+
+        owner->add_connection_timer(ret);
         return ret;
     }
 
@@ -60,12 +62,13 @@ namespace atbus {
 
         if (NULL != binding_) {
             binding_->remove_connection(this);
+
+            // 只能由上层设置binding_所属的节点
+            // binding_ = NULL;
+            assert(NULL == binding_);
         }
 
         flags_.reset();
-        // 只能由上层设置binding_所属的节点
-        // binding_ = NULL;
-
         // 只要connection存在，则它一定存在于owner_的某个位置。
         // 并且这个值只能在创建时指定，所以不能重置这个值
         // owner_ = NULL;
@@ -165,11 +168,6 @@ namespace atbus {
                 delete async_data;
                 return res;
             }
-
-            // 可能会进入异步流程
-            if (state_t::CONNECTING == state_) {
-                owner_->add_connection_timer(self);
-            }
         }
 
         return EN_ATBUS_ERR_SUCCESS;
@@ -189,7 +187,7 @@ namespace atbus {
             return EN_ATBUS_ERR_CHANNEL_ADDR_INVALID;
         }
 
-        if (0 == UTIL_STRFUNC_STRNCASE_CMP("mem:", address_.scheme.c_str(), 4)) {
+        if (0 == UTIL_STRFUNC_STRNCASE_CMP("mem", address_.scheme.c_str(), 3)) {
             channel::mem_channel* mem_chann = NULL;
             intptr_t ad;
             util::string::str2int(ad, address_.host.c_str());
@@ -218,7 +216,7 @@ namespace atbus {
             }
 
             return res;
-        } else if (0 == UTIL_STRFUNC_STRNCASE_CMP("shm:", address_.scheme.c_str(), 4)) {
+        } else if (0 == UTIL_STRFUNC_STRNCASE_CMP("shm", address_.scheme.c_str(), 3)) {
             channel::shm_channel* shm_chann = NULL;
             key_t shm_key;
             util::string::str2int(shm_key, address_.host.c_str());
@@ -263,11 +261,6 @@ namespace atbus {
                 delete async_data;
                 return res;
             }
-
-            // 可能会进入异步流程
-            if (state_t::CONNECTING == state_) {
-                owner_->add_connection_timer(self);
-            }
         }
 
         return EN_ATBUS_ERR_SUCCESS;
@@ -307,7 +300,7 @@ namespace atbus {
     }
 
     int connection::push(const void* buffer, size_t s) {
-        if (state_t::CONNECTED != state_) {
+        if (state_t::CONNECTED != state_ && state_t::HANDSHAKING != state_) {
             return EN_ATBUS_ERR_NOT_INITED;
         }
 

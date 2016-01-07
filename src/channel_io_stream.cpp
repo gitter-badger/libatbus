@@ -1044,8 +1044,8 @@ namespace atbus {
             }
 
             // socket 
-            if (0 == UTIL_STRFUNC_STRNCASE_CMP("ipv4:", addr.scheme.c_str(), 5) ||
-                0 == UTIL_STRFUNC_STRNCASE_CMP("ipv6:", addr.scheme.c_str(), 5)) {
+            if (0 == UTIL_STRFUNC_STRNCASE_CMP("ipv4", addr.scheme.c_str(), 4) ||
+                0 == UTIL_STRFUNC_STRNCASE_CMP("ipv6", addr.scheme.c_str(), 4)) {
                 std::shared_ptr<adapter::stream_t> sock_conn;
                 adapter::tcp_t* handle = io_stream_make_stream_ptr<adapter::tcp_t>(sock_conn);
                 if (NULL == handle) {
@@ -1100,7 +1100,7 @@ namespace atbus {
 
                 uv_close(reinterpret_cast<uv_handle_t*>(handle), io_stream_connection_on_close);
                 return ret;
-            } else if (0 == UTIL_STRFUNC_STRNCASE_CMP("unix:", addr.scheme.c_str(), 5)) {
+            } else if (0 == UTIL_STRFUNC_STRNCASE_CMP("unix", addr.scheme.c_str(), 4)) {
                 std::shared_ptr<adapter::stream_t> pipe_conn;
                 adapter::pipe_t* handle = io_stream_make_stream_ptr<adapter::pipe_t>(pipe_conn);
                 if (NULL == handle) {
@@ -1141,7 +1141,7 @@ namespace atbus {
                 uv_close(reinterpret_cast<uv_handle_t*>(handle), io_stream_connection_on_close);
                 return ret;
                 
-            } else if (0 == UTIL_STRFUNC_STRNCASE_CMP("dns:", addr.scheme.c_str(), 4)) {
+            } else if (0 == UTIL_STRFUNC_STRNCASE_CMP("dns", addr.scheme.c_str(), 3)) {
                 io_stream_dns_async_data* async_data = new io_stream_dns_async_data();
                 if (NULL == async_data) {
                     return EN_ATBUS_ERR_MALLOC;
