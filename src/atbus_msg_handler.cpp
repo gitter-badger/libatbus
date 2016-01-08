@@ -11,6 +11,47 @@
 
 namespace atbus {
 
+    namespace detail {
+        const char* get_cmd_name(ATBUS_PROTOCOL_CMD cmd) {
+            static std::string fn_names[ATBUS_CMD_MAX];
+
+#define ATBUS_CMD_REG_NAME(x) fn_names[x] = #x
+
+            if (fn_names[ATBUS_CMD_DATA_TRANSFORM_REQ].empty()) {
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_DATA_TRANSFORM_REQ);
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_DATA_TRANSFORM_RSP);
+
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_CUSTOM_CMD_REQ);
+
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_NODE_SYNC_REQ);
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_NODE_SYNC_RSP);
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_NODE_REG_REQ);
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_NODE_REG_RSP);
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_NODE_CONN_SYN);
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_NODE_PING);
+                ATBUS_CMD_REG_NAME(ATBUS_CMD_NODE_PONG);
+
+                for (int i = 0; i < ATBUS_CMD_MAX; ++i) {
+                    if (fn_names[i].empty()) {
+                        std::stringstream ss;
+                        ss << i;
+                        ss >> fn_names[i];
+                    } else {
+                        fn_names[i] = fn_names[i].substr(10);
+                    }
+                }
+            }
+
+#undef ATBUS_CMD_REG_NAME
+
+            if (cmd >= ATBUS_CMD_MAX) {
+                return "Invalid Cmd";
+            }
+
+            return fn_names[cmd].c_str();
+        }
+    }
+
     int msg_handler::dispatch_msg(node& n, connection* conn, protocol::msg* m, int status, int errcode) {
         static handler_fn_t fns[ATBUS_CMD_MAX] = { NULL };
         if (NULL == fns[ATBUS_CMD_DATA_TRANSFORM_REQ]) {
@@ -103,6 +144,12 @@ namespace atbus {
             return EN_ATBUS_ERR_BUFF_LIMIT;
         }
 
+        ATBUS_FUNC_NODE_DEBUG(n, conn.get_binding(), &conn, 
+            "node send msg(cmd=%s, type=%d, length=%llu)", 
+            detail::get_cmd_name(m.head.cmd), 
+            m.head.type,
+            static_cast<unsigned long long>(packed_buffer.size())
+       );
         return conn.push(packed_buffer.data(), packed_buffer.size());;
     }
 
@@ -113,6 +160,7 @@ namespace atbus {
         }
 
         if (m.body.forward->to == n.get_id()) {
+            ATBUS_FUNC_NODE_DEBUG(n, (NULL == conn?NULL: conn->get_binding()), conn, "node recv data length = %lld", static_cast<unsigned long long>(m.body.forward->content.size));
             n.on_recv_data(conn, m.head.type, m.body.forward->content.ptr, m.body.forward->content.size);
             return EN_ATBUS_ERR_SUCCESS;
         }
@@ -141,8 +189,8 @@ namespace atbus {
                 const std::list<std::string>& listen_addrs = to_ep->get_listen();
                 for (std::list<std::string>::const_iterator iter = listen_addrs.begin(); iter != listen_addrs.end(); ++ iter) {
                     // 通知连接控制通道，控制通道不能是（共享）内存通道
-                    if (0 != UTIL_STRFUNC_STRNCASE_CMP("mem:", iter->c_str(), 4) &&
-                        0 != UTIL_STRFUNC_STRNCASE_CMP("shm:", iter->c_str(), 4)) {
+                    if (0 != UTIL_STRFUNC_STRNCASE_CMP("mem", iter->c_str(), 3) &&
+                        0 != UTIL_STRFUNC_STRNCASE_CMP("shm", iter->c_str(), 3)) {
                         new_conn->address.address = *iter;
                         break;
                     }
@@ -249,7 +297,7 @@ namespace atbus {
                 }
                 rsp_code = res;
 
-                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "connection added to existed endpoint, ret code %d", res);
+                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "connection added to existed endpoint, res: %d", res);
                 break;
             }
 
@@ -280,7 +328,7 @@ namespace atbus {
             }
             ep->set_flag(endpoint::flag_t::GLOBAL_ROUTER, m.body.reg->has_global_tree);
 
-            ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node add a new endpoint, ret code: %d", res);
+            ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node add a new endpoint, res: %d", res);
             // 新的endpoint要建立所有连接
             ep->add_connection(conn, false);
             for (size_t i = 0; i < m.body.reg->channels.size(); ++i) {
@@ -324,6 +372,8 @@ namespace atbus {
             conn->disconnect();
             if (conn->get_address().address == n.get_conf().father_address) {
                 if (!n.check(node::flag_t::EN_FT_ACTIVED)) {
+
+                    ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node register to parent node failed, shutdown");
                     n.shutdown(m.head.ret);
                 }
             }
@@ -340,6 +390,7 @@ namespace atbus {
             return EN_ATBUS_ERR_BAD_DATA;
         }
 
+        ATBUS_FUNC_NODE_DEBUG(n, NULL, NULL, "node recv conn_syn and prepare connect to %s", m.body.conn->address.address.c_str());
         int ret = n.connect(m.body.conn->address.address.c_str());
         if (ret < 0) {
             ATBUS_FUNC_NODE_ERROR(n, n.get_self_endpoint(), NULL, ret, 0);
@@ -358,6 +409,7 @@ namespace atbus {
         if (NULL != conn) {
             endpoint* ep = conn->get_binding();
             if (NULL != ep) {
+                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node recv ping");
                 return n.send_ctrl_msg(ep->get_id(), m);
             }
         }
@@ -373,6 +425,8 @@ namespace atbus {
 
         if (NULL != conn) {
             endpoint* ep = conn->get_binding();
+            ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node recv pong");
+
             if (NULL != ep && m.head.sequence == ep->get_stat_ping()) {
                 ep->set_stat_ping(0);
 

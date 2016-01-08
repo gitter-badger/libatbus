@@ -264,7 +264,7 @@ namespace atbus {
     public:
         channel::io_stream_channel* get_iostream_channel();
 
-        inline const endpoint* get_self_endpoint() const { return self_.get(); }
+        inline const endpoint* get_self_endpoint() const { return self_? self_.get(): NULL; }
 
         inline const endpoint* get_parent_endpoint() const { return node_father_.node_.get(); }
 
@@ -276,7 +276,7 @@ namespace atbus {
         channel::io_stream_conf* get_iostream_conf();
 
     public:
-        inline bus_id_t get_id() const { return self_->get_id(); }
+        inline bus_id_t get_id() const { return self_? self_->get_id(): 0; }
         inline const conf_t& get_conf() const { return conf_; }
 
         inline bool check(flag_t::type f) const { return flags_.test(f); }

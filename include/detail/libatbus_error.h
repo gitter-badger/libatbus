@@ -31,6 +31,7 @@ typedef enum {
     EN_ATBUS_ERR_CHANNEL_SIZE_TOO_SMALL     = -101,
     EN_ATBUS_ERR_CHANNEL_BUFFER_INVALID     = -102, // 缓冲区错误（已被其他模块使用或检测冲突）
     EN_ATBUS_ERR_CHANNEL_ADDR_INVALID       = -103, // 地址错误
+    EN_ATBUS_ERR_CHANNEL_CLOSING            = -104, // 正在关闭
 
     EN_ATBUS_ERR_NODE_BAD_BLOCK_NODE_NUM    = -202,// 发现写坏的数据块 - 节点数量错误
     EN_ATBUS_ERR_NODE_BAD_BLOCK_BUFF_SIZE   = -203,// 发现写坏的数据块 - 节点数量错误

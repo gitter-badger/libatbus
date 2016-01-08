@@ -50,6 +50,7 @@ namespace atbus {
 
 #ifdef ATBUS_MACRO_ENABLE_STATIC_ASSERT
         static_assert(std::is_pod<io_stream_conf>::value, "io_stream_conf should be a pod type");
+        static_assert(io_stream_channel::EN_CF_MAX <= sizeof(int) * 8, "io_stream_channel::flag_t should has no more bits than io_stream_channel::flags");
 #endif
 
         union io_stream_sockaddr_switcher {
@@ -131,7 +132,7 @@ namespace atbus {
                 channel->ev_loop = reinterpret_cast<adapter::loop_t*>(malloc(sizeof(adapter::loop_t)));
                 if (NULL != channel->ev_loop) {
                     uv_loop_init(channel->ev_loop);
-                    channel->is_loop_owner = true;
+                    ATBUS_CHANNEL_IOS_SET_FLAG(channel->flags, io_stream_channel::EN_CF_IS_LOOP_OWNER);
                 }
             }
 
@@ -152,7 +153,7 @@ namespace atbus {
 
             channel->conf = *conf;
             channel->ev_loop = ev_loop;
-            channel->is_loop_owner = false;
+            ATBUS_CHANNEL_IOS_CLEAR_FLAG(channel->flags);
 
             memset(channel->evt.callbacks, 0, sizeof(channel->evt.callbacks));
 
@@ -164,6 +165,8 @@ namespace atbus {
             if (NULL == channel) {
                 return EN_ATBUS_ERR_PARAMS;
             }
+
+            ATBUS_CHANNEL_IOS_SET_FLAG(channel->flags, io_stream_channel::EN_CF_CLOSING);
 
             // 释放所有连接
             {
@@ -184,7 +187,7 @@ namespace atbus {
             // 当然也可以用另一种方法强行结束掉所有req，但是这样会造成丢失回调
             // 并且这会要求逻辑层设计相当完善，否则可能导致内存泄漏。所以为了简化逻辑层设计，还是block并销毁所有数据
 
-            if (true == channel->is_loop_owner && NULL != channel->ev_loop) {
+            if (ATBUS_CHANNEL_IOS_CHECK_FLAG(channel->flags, io_stream_channel::EN_CF_IS_LOOP_OWNER) && NULL != channel->ev_loop) {
                 // 先清理掉所有可以完成的事件
                 while (uv_run(channel->ev_loop, UV_RUN_NOWAIT)) {
                     uv_run(channel->ev_loop, UV_RUN_ONCE);
@@ -201,6 +204,8 @@ namespace atbus {
             }
 
             channel->ev_loop = NULL;
+
+            ATBUS_CHANNEL_IOS_UNSET_FLAG(channel->flags, io_stream_channel::EN_CF_CLOSING);
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -595,7 +600,10 @@ namespace atbus {
         }
 
         // tcp 收到连接通用逻辑
-        static adapter::tcp_t* io_stream_tcp_connection_common(std::shared_ptr<io_stream_connection>& conn, uv_stream_t* req, int status) {
+        static adapter::tcp_t* io_stream_tcp_connection_common(
+            std::shared_ptr<io_stream_connection>& conn, 
+            std::shared_ptr<adapter::stream_t>& recv_conn,
+            uv_stream_t* req, int status) {
             io_stream_connection* conn_raw_ptr = reinterpret_cast<io_stream_connection*>(req->data);
             assert(conn_raw_ptr);
             io_stream_channel* channel = conn_raw_ptr->channel;
@@ -605,7 +613,6 @@ namespace atbus {
                 return NULL;
             }
 
-            std::shared_ptr<adapter::stream_t> recv_conn;
             adapter::tcp_t* tcp_conn = io_stream_make_stream_ptr<adapter::tcp_t>(recv_conn);
             if (NULL == tcp_conn) {
                 return NULL;
@@ -616,23 +623,21 @@ namespace atbus {
                 return NULL;
             }
 
+            // 正在关闭，新连接直接断开，要在accept后执行，以保证连接会被正确断开
+            if (ATBUS_CHANNEL_IOS_CHECK_FLAG(channel->flags, io_stream_channel::EN_CF_CLOSING)) {
+                return NULL;
+            }
+
             conn = io_stream_make_connection(
                 channel,
                 recv_conn
             );
 
             if (!conn) {
-                // 拿一个东西来保存handle,否则会在close回调前释放handle
-                io_stream_connect_async_data* async_data = new io_stream_connect_async_data();
-                async_data->stream = recv_conn;
-                async_data->priv_data = NULL;
-                async_data->priv_size = 0;
-                recv_conn->data = async_data;
-
-                uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), io_stream_connect_on_failed_close);
                 return NULL;
             }
 
+            // 后面不会再失败了
             io_stream_tcp_setup(channel, tcp_conn);
             io_stream_tcp_init(channel, conn.get(), tcp_conn);
             return tcp_conn;
@@ -651,11 +656,17 @@ namespace atbus {
             std::shared_ptr<io_stream_connection> conn;
 
             do {
-                adapter::tcp_t* tcp_conn = io_stream_tcp_connection_common(conn, req, status);
+                adapter::tcp_t* tcp_conn = io_stream_tcp_connection_common(conn, recv_conn, req, status);
                 if (NULL == tcp_conn || !conn) {
-                    res = EN_ATBUS_ERR_SOCK_CONNECT_FAILED;
+                    if (ATBUS_CHANNEL_IOS_CHECK_FLAG(channel->flags, io_stream_channel::EN_CF_CLOSING)) {
+                        res = EN_ATBUS_ERR_CHANNEL_CLOSING;
+                    } else {
+                        res = EN_ATBUS_ERR_SOCK_CONNECT_FAILED;
+                    }
                     break;
                 }
+
+                // 后面不会再失败了
 
                 conn->status = io_stream_connection::EN_ST_CONNECTED;
 
@@ -675,6 +686,12 @@ namespace atbus {
 
             // 回调函数，如果发起连接接口调用成功一定要调用回调函数
             io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), channel->error_code, res, NULL, 0);
+
+            if (!conn && recv_conn) {
+                // 失败且已accept则关闭
+                recv_conn->data = NULL;
+                uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), NULL);
+            }
         }
 
         // pipe 收到连接
@@ -687,13 +704,14 @@ namespace atbus {
             int res = EN_ATBUS_ERR_SUCCESS;
 
             std::shared_ptr<io_stream_connection> conn;
+            std::shared_ptr<adapter::stream_t> recv_conn;
+
             do {
                 if (0 != status || NULL == channel) {
                     res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
                     break;
                 }
-
-                std::shared_ptr<adapter::stream_t> recv_conn;
+                
                 adapter::pipe_t* pipe_conn = io_stream_make_stream_ptr<adapter::pipe_t>(recv_conn);
                 if (NULL == pipe_conn) {
                     res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
@@ -706,23 +724,23 @@ namespace atbus {
                     break;
                 }
 
+                // 正在关闭，新连接直接断开，要在accept后执行，以保证新连接能被正确断开
+                if (ATBUS_CHANNEL_IOS_CHECK_FLAG(channel->flags, io_stream_channel::EN_CF_CLOSING)) {
+                    res = EN_ATBUS_ERR_CHANNEL_CLOSING;
+                    break;
+                }
+
                 conn = io_stream_make_connection(
                     channel,
                     recv_conn
                 );
 
                 if (!conn) {
-                    // 拿一个东西来保存handle,否则会在close回调前释放handle
-                    io_stream_connect_async_data* async_data = new io_stream_connect_async_data();
-                    async_data->stream = recv_conn;
-                    async_data->priv_data = NULL;
-                    async_data->priv_size = 0;
-                    recv_conn->data = async_data;
-
-                    uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), io_stream_connect_on_failed_close);
                     res = EN_ATBUS_ERR_PIPE_CONNECT_FAILED;
                     break;
                 }
+
+                // 后面不会再失败了
 
                 conn->status = io_stream_connection::EN_ST_CONNECTED;
 
@@ -738,6 +756,12 @@ namespace atbus {
 
             // 回调函数，如果发起连接接口调用成功一定要调用回调函数
             io_stream_channel_callback(io_stream_callback_evt_t::EN_FN_ACCEPTED, channel, conn_raw_ptr, conn.get(), channel->error_code, res, NULL, 0);
+
+            if (!conn && recv_conn) {
+                // 没什么要做的，直接关闭吧
+                recv_conn->data = NULL;
+                uv_close(reinterpret_cast<adapter::handle_t*>(recv_conn.get()), NULL);
+            }
         }
 
         // listen 接口传入域名时的回调异步数据
@@ -808,6 +832,11 @@ namespace atbus {
             io_stream_callback_t callback, void* priv_data, size_t priv_size) {
             if (NULL == channel) {
                 return EN_ATBUS_ERR_PARAMS;
+            }
+
+            // 正在关闭，不允许启用新的监听
+            if (ATBUS_CHANNEL_IOS_CHECK_FLAG(channel->flags, io_stream_channel::EN_CF_CLOSING)) {
+                return EN_ATBUS_ERR_CHANNEL_CLOSING;
             }
 
             adapter::loop_t* ev_loop = io_stream_get_loop(channel);
@@ -947,6 +976,12 @@ namespace atbus {
                     break;
                 }
 
+                // 正在关闭，新连接直接断开
+                if (ATBUS_CHANNEL_IOS_CHECK_FLAG(async_data->channel->flags, io_stream_channel::EN_CF_CLOSING)) {
+                    errcode = EN_ATBUS_ERR_CHANNEL_CLOSING;
+                    break;
+                }
+
                 conn = io_stream_make_connection(async_data->channel, async_data->stream);
                 if (!conn) {
                     errcode = EN_ATBUS_ERR_MALLOC;
@@ -1036,6 +1071,11 @@ namespace atbus {
             io_stream_callback_t callback, void* priv_data, size_t priv_size) {
             if (NULL == channel) {
                 return EN_ATBUS_ERR_PARAMS;
+            }
+
+            // 正在关闭，不允许启动新连接
+            if (ATBUS_CHANNEL_IOS_CHECK_FLAG(channel->flags, io_stream_channel::EN_CF_CLOSING)) {
+                return EN_ATBUS_ERR_CHANNEL_CLOSING;
             }
 
             adapter::loop_t* ev_loop = io_stream_get_loop(channel);

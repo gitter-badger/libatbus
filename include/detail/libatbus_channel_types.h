@@ -140,8 +140,14 @@ namespace atbus {
         };
 
         struct io_stream_channel {
+            typedef enum {
+                EN_CF_IS_LOOP_OWNER = 0,
+                EN_CF_CLOSING,
+                EN_CF_MAX,
+            } flag_t;
+
             adapter::loop_t* ev_loop;
-            bool is_loop_owner;
+            int flags;
 
             io_stream_conf conf;
 
@@ -157,6 +163,11 @@ namespace atbus {
             // 自定义数据区域
             void* data;
         };
+
+        #define ATBUS_CHANNEL_IOS_CHECK_FLAG(f, v) (0 != ((f) & (1<< (v))))
+        #define ATBUS_CHANNEL_IOS_SET_FLAG(f, v) (f) |= (1 << (v))
+        #define ATBUS_CHANNEL_IOS_UNSET_FLAG(f, v) (f) &= ~(1 << (v))
+        #define ATBUS_CHANNEL_IOS_CLEAR_FLAG(f) (f) = 0
     }
 }
 

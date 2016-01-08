@@ -50,6 +50,7 @@ namespace atbus {
     }
 
     node::~node() {
+        ATBUS_FUNC_NODE_DEBUG(*this, NULL, NULL, "node destroyed");
         reset();
     }
 
@@ -147,26 +148,24 @@ namespace atbus {
 
         // 销毁endpoint
         if (node_father_.node_) {
-            node_father_.node_->reset();
             node_father_.node_.reset();
         }
-
-        for (endpoint_collection_t::iterator iter = node_brother_.begin(); iter != node_brother_.end(); ++ iter) {
-            if (iter->second) {
-                iter->second->reset();
-            }
-        }
+        // endpoint 不应该游离在node以外，所以这里就应该要触发endpoint::reset
         node_brother_.clear();
-
-        for (endpoint_collection_t::iterator iter = node_children_.begin(); iter != node_children_.end(); ++iter) {
-            if (iter->second) {
-                iter->second->reset();
-            }
-        }
         node_children_.clear();
 
-        // 清空检测列表
+        // 清空检测列表和ping列表
         event_timer_.pending_check_list_.clear();
+        event_timer_.ping_list.clear();
+
+        // 清空正在连接或握手的列表
+        event_timer_.connecting_list.clear();
+
+        // 重置自身的endpoint
+        if (self_) {
+            // 不销毁，下一次替换，保证某些接口可用
+            self_->reset();
+        }
 
         // 基础数据
         iostream_channel_.reset();
@@ -737,10 +736,6 @@ namespace atbus {
             return false;
         }
 
-        if (connection::state_t::DISCONNECTED == conn->get_status() || connection::state_t::DISCONNECTING == conn->get_status()) {
-            return false;
-        }
-
         // 如果处于握手阶段，发送节点关系逻辑并加入握手连接池并加入超时判定池
         if (false == conn->is_connected()) {
             event_timer_.connecting_list.push_back(std::make_pair(event_timer_.sec + conf_.first_idle_timeout, conn));
@@ -944,6 +939,12 @@ namespace atbus {
     }
 
     void node::add_check_list(const endpoint::ptr_t& ep) {
+        // 重置过程中不需要再加进来了，反正等会也会移除
+        // 这个代码加不加一样，只不过会少一些废操作
+        if (flags_.test(flag_t::EN_FT_RESETTING)) {
+            return;
+        }
+
         if (ep) {
             event_timer_.pending_check_list_.push_back(ep);
         }

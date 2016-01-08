@@ -58,6 +58,9 @@ namespace atbus {
         }
         flags_.set(flag_t::RESETTING, true);
 
+        // 需要临时给自身加引用计数，否则后续移除的过程中可能导致数据被提前释放
+        ptr_t tmp_holder = watcher_.lock();
+
         disconnect();
 
         if (NULL != binding_) {
@@ -283,6 +286,7 @@ namespace atbus {
         }
 
         if (NULL != owner_) {
+            ATBUS_FUNC_NODE_DEBUG(*owner_, get_binding(), this, "connection disconnected");
             owner_->on_disconnect(this);
         }
 
@@ -387,6 +391,8 @@ namespace atbus {
             async_data->conn->conn_data_.push_fn = ios_push_fn;
             connection->data = async_data->conn.get();
 
+
+            ATBUS_FUNC_NODE_DEBUG(*async_data->owner_node, NULL, async_data->conn.get(), "finish a new connection");
             async_data->owner_node->on_new_connection(async_data->conn.get());
         }
 
@@ -439,6 +445,8 @@ namespace atbus {
         conn->conn_data_.shared.ios_fd.conn = conn_ios;
         conn_ios->data = conn.get();
 
+
+        ATBUS_FUNC_NODE_DEBUG(*n, NULL, conn.get(), "accept a new connection");
         n->on_new_connection(conn.get());
     }
 
@@ -447,11 +455,13 @@ namespace atbus {
 
     void connection::iostream_on_disconnected(channel::io_stream_channel* channel, channel::io_stream_connection* conn_ios, int status, void* buffer, size_t s) {
         connection* conn = reinterpret_cast<connection*>(conn_ios->data);
-        assert(NULL != conn);
+        
+        // 主动关闭时会先释放connection，这时候connection已经被释放，不需要再重置
         if (NULL == conn) {
             return;
         }
 
+        ATBUS_FUNC_NODE_DEBUG(*conn->owner_, conn->get_binding(), conn, "connection reset by peer");
         conn->reset();
     }
 
@@ -556,7 +566,11 @@ namespace atbus {
     }
 
     int connection::ios_free_fn(node& n, connection& conn) {
-        return channel::io_stream_disconnect(conn.conn_data_.shared.ios_fd.channel, conn.conn_data_.shared.ios_fd.conn, NULL);
+        int ret = channel::io_stream_disconnect(conn.conn_data_.shared.ios_fd.channel, conn.conn_data_.shared.ios_fd.conn, NULL);
+        // 释放后移除关联关系
+        conn.conn_data_.shared.ios_fd.conn->data = NULL;
+
+        return ret;
     }
 
     int connection::ios_push_fn(connection& conn, const void* buffer, size_t s) {

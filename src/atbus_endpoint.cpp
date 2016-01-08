@@ -9,6 +9,7 @@
 #include "detail/buffer.h"
 
 #include "atbus_endpoint.h"
+#include "atbus_node.h"
 
 
 #include "detail/libatbus_protocol.h"
@@ -51,21 +52,29 @@ namespace atbus {
         }
         flags_.set(flag_t::RESETTING, true);
 
+        // 需要临时给自身加引用计数，否则后续移除的过程中可能导致数据被提前释放
+        ptr_t tmp_holder = watcher_.lock();
+
         // 释放连接
         if(ctrl_conn_) {
-            ctrl_conn_->reset();
+            ctrl_conn_->binding_ = NULL;
             ctrl_conn_.reset();
         }
-        for (std::list<connection::ptr_t>::iterator iter = data_conn_.begin(); iter != data_conn_.end(); ++ iter) {
-            if(*iter) {
-                (*iter)->reset();
-            }
+
+        // 这时候connection可能在其他地方被引用，不会触发reset函数，所以还是要reset一下
+        for (std::list<connection::ptr_t>::iterator iter = data_conn_.begin(); iter != data_conn_.end(); ++iter) {
+            (*iter)->reset();
         }
         data_conn_.clear();
 
         flags_.reset();
         // 只要endpoint存在，则它一定存在于owner_的某个位置。
         // 并且这个值只能在创建时指定，所以不能重置这个值
+
+        // 所有的endpoint的reset行为都要加入到检测和释放列表
+        if (NULL != owner_) {
+            owner_->add_check_list(tmp_holder);
+        }
     }
 
     bool endpoint::is_child_node(bus_id_t id) const {
@@ -153,7 +162,6 @@ namespace atbus {
 
         // 重置流程会在reset里清理对象，不需要再进行一次查找
         if (flags_.test(flag_t::RESETTING)) {
-            conn->reset();
             conn->binding_ = NULL;
             return true;
         }
@@ -168,12 +176,9 @@ namespace atbus {
         // 所以O(log(n))的复杂度并没有关系
         for (std::list<connection::ptr_t>::iterator iter = data_conn_.begin(); iter != data_conn_.end(); ++iter) {
             if ((*iter).get() == conn) {
-                assert(this == conn->binding_);
-                (*iter)->reset();
-
                 conn->binding_ = NULL;
                 data_conn_.erase(iter);
-
+                
                 // 数据节点全部离线也直接下线
                 // 内存和共享内存通道不会被动下线
                 // 如果任意tcp通道被动下线或者存在内存或共享内存通道则无需下载
