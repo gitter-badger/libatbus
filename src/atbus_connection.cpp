@@ -281,7 +281,10 @@ namespace atbus {
         state_ = state_t::DISCONNECTING;
         if (NULL != conn_data_.free_fn) {
             if (NULL != owner_) {
-                conn_data_.free_fn(*owner_, *this);
+                int res = conn_data_.free_fn(*owner_, *this);
+                if (res < 0) {
+                    ATBUS_FUNC_NODE_DEBUG(*owner_, get_binding(), this, "destroy connection failed, res: %d", res);
+                }
             }
         }
 
@@ -410,8 +413,9 @@ namespace atbus {
             return;
         }
 
+        // connection 已经释放并解除绑定，这时候会先把剩下未处理的消息处理完再关闭
         if (NULL == conn) {
-            ATBUS_FUNC_NODE_ERROR(*_this, conn->binding_, conn, EN_ATBUS_ERR_UNPACK, EN_ATBUS_ERR_PARAMS);
+            //ATBUS_FUNC_NODE_ERROR(*_this, NULL, conn, EN_ATBUS_ERR_UNPACK, EN_ATBUS_ERR_PARAMS);
             return;
         }
 

@@ -85,7 +85,10 @@ CASE_TEST(atbus_node_reg, reset_and_send)
     atbus::node::conf_t conf;
     atbus::node::default_conf(&conf);
     conf.children_mask = 16;
-    conf.ev_loop = uv_loop_new();
+    uv_loop_t ev_loop;
+    uv_loop_init(&ev_loop);
+
+    conf.ev_loop = &ev_loop;
 
     {
         atbus::node::ptr_t node1 = atbus::node::create();
@@ -160,7 +163,10 @@ CASE_TEST(atbus_node_reg, reset_and_send)
         CASE_EXPECT_EQ(NULL, node1->get_endpoint(node2->get_id()));
 
     }
-    uv_loop_delete(conf.ev_loop);
+
+    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
+        uv_run(&ev_loop, UV_RUN_ONCE);
+    }
 }
 
 // 被动析构流程测试
@@ -169,7 +175,10 @@ CASE_TEST(atbus_node_reg, destruct)
     atbus::node::conf_t conf;
     atbus::node::default_conf(&conf);
     conf.children_mask = 16;
-    conf.ev_loop = uv_loop_new();
+    uv_loop_t ev_loop;
+    uv_loop_init(&ev_loop);
+
+    conf.ev_loop = &ev_loop;
 
     {
         atbus::node::ptr_t node1 = atbus::node::create();
@@ -203,6 +212,11 @@ CASE_TEST(atbus_node_reg, destruct)
             }
         }
 
+        //for (int i = 0; i < 16; ++i) {
+        //    uv_run(conf.ev_loop, UV_RUN_NOWAIT);
+        //    CASE_THREAD_SLEEP_MS(4);
+        //}
+
         // reset shared_ptr and delete it 
         node1.reset();
 
@@ -220,7 +234,10 @@ CASE_TEST(atbus_node_reg, destruct)
 
         CASE_EXPECT_EQ(NULL, node2->get_endpoint(0x12345678));
     }
-    uv_loop_delete(conf.ev_loop);
+
+    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
+        uv_run(&ev_loop, UV_RUN_ONCE);
+    }
 }
 
 // TODO 注册成功流程测试

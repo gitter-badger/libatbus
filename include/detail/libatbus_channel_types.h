@@ -89,6 +89,13 @@ namespace atbus {
 
         // 以下不是POD类型，所以不得不暴露出来
         struct io_stream_connection {
+            typedef enum {
+                EN_CF_LISTEN = 0,
+                EN_CF_CONNECT,
+                EN_CF_ACCEPT,
+                EN_CF_MAX,
+            } flag_t;
+
             channel_address_t                   addr;
             std::shared_ptr<adapter::stream_t>  handle;                 // 流设备
             adapter::fd_t                       fd;                     // 文件描述符
@@ -97,9 +104,11 @@ namespace atbus {
                 EN_ST_CREATED = 0,
                 EN_ST_CONNECTING,
                 EN_ST_CONNECTED,
+                EN_ST_DISCONNECTING,
                 EN_ST_DISCONNECTIED
             } status_t;
             status_t                            status;                 // 状态
+            int                                 flags;                  // flag
             io_stream_channel*                  channel;
 
             // 事件响应

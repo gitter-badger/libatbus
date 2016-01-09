@@ -127,7 +127,10 @@ CASE_TEST(atbus_endpoint, get_connection)
     atbus::node::conf_t conf;
     atbus::node::default_conf(&conf);
     conf.children_mask = 16;
-    conf.ev_loop = uv_loop_new();
+    uv_loop_t ev_loop;
+    uv_loop_init(&ev_loop);
+
+    conf.ev_loop = &ev_loop;
     conf.recv_buffer_size = 64 * 1024;
 
     char* buffer = new char[conf.recv_buffer_size];
@@ -154,6 +157,10 @@ CASE_TEST(atbus_endpoint, get_connection)
 
         atbus::connection* conn3 = node->get_self_endpoint()->get_data_connection(ep.get());
         CASE_EXPECT_EQ(conn3, conn1.get());
+
+        //while (uv_run(&ev_loop, UV_RUN_NOWAIT)) {
+        //    uv_run(&ev_loop, UV_RUN_ONCE);
+        //}
     }
 
     // 同进程/物理机连接
@@ -222,6 +229,8 @@ CASE_TEST(atbus_endpoint, get_connection)
 //        CASE_EXPECT_EQ(conn3, conn2.get());
 //    }
 
-    delete []buffer;
-    uv_loop_delete(conf.ev_loop);
+    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
+        uv_run(&ev_loop, UV_RUN_ONCE);
+    }
+    delete[]buffer;
 }
