@@ -18,8 +18,36 @@
 namespace atbus {
     namespace detail {
         struct connection_async_data {
-            node::ptr_t owner_node;
+            node* owner_node;
             connection::ptr_t conn;
+            
+            connection_async_data(node* o): owner_node(o) {
+                assert(owner_node);
+                owner_node->ref_object(reinterpret_cast<void*>(this));
+            }
+            
+            ~connection_async_data() {
+                owner_node->unref_object(reinterpret_cast<void*>(this));
+            }
+            
+            connection_async_data(const connection_async_data& other): owner_node(other.owner_node), conn(other.conn) {
+                assert(owner_node);
+                owner_node->ref_object(reinterpret_cast<void*>(this));
+            }
+            
+            connection_async_data& operator=(const connection_async_data& other) {
+                assert(owner_node);
+                assert(other.owner_node);
+                
+                if (owner_node != other.owner_node) {
+                    owner_node->unref_object(reinterpret_cast<void*>(this));
+                    other.owner_node->ref_object(reinterpret_cast<void*>(this));
+                    
+                    owner_node = other.owner_node;
+                }
+                
+                conn = other.conn;
+            }
         };
     }
 
@@ -157,13 +185,12 @@ namespace atbus {
 
             return res;
         } else {
-            detail::connection_async_data* async_data = new detail::connection_async_data();
+            detail::connection_async_data* async_data = new detail::connection_async_data(owner_);
             if (NULL == async_data) {
                 return EN_ATBUS_ERR_MALLOC;
             }
             connection::ptr_t self = watcher_.lock();
             async_data->conn = self;
-            async_data->owner_node = owner_->get_watcher();
 
             state_ = state_t::CONNECTING;
             int res = channel::io_stream_listen(owner_->get_iostream_channel(), address_, iostream_on_listen_cb, async_data, 0);
@@ -250,13 +277,12 @@ namespace atbus {
 
             return res;
         } else {
-            detail::connection_async_data* async_data = new detail::connection_async_data();
+            detail::connection_async_data* async_data = new detail::connection_async_data(owner_);
             if (NULL == async_data) {
                 return EN_ATBUS_ERR_MALLOC;
             }
             connection::ptr_t self = watcher_.lock();
             async_data->conn = self;
-            async_data->owner_node = owner_->get_watcher();
 
             state_ = state_t::CONNECTING;
             int res = channel::io_stream_connect(owner_->get_iostream_channel(), address_, iostream_on_connected_cb, async_data, 0);

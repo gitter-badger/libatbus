@@ -13,6 +13,9 @@
 #include <bitset>
 #include <ctime>
 #include <map>
+#include <set>
+#include <stdint.h>
+#include <cstddef>
 
 #ifdef _MSC_VER
 #include <WinSock2.h>
@@ -332,6 +335,10 @@ namespace atbus {
 
         void set_on_recv_handle(evt_msg_t::on_recv_msg_fn_t fn);
         evt_msg_t::on_recv_msg_fn_t get_on_recv_handle() const;
+        
+        void ref_object(void*);
+        void unref_object(void*);
+        
     private:
         static endpoint* find_child(endpoint_collection_t& coll, bus_id_t id);
 
@@ -365,6 +372,9 @@ namespace atbus {
         std::weak_ptr<node> watcher_; // just like std::shared_from_this<T>
         util::lock::seq_alloc_u32 msg_seq_alloc_;
 
+        // 引用的资源标记（释放时要保证这些资源引用被移除）
+        std::set<intptr_t> ref_objs_;
+        
         // ============ IO事件数据 ============
         // 事件分发器
         adapter::loop_t* ev_loop_;

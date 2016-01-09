@@ -159,6 +159,14 @@ namespace atbus {
         event_timer_.ping_list.clear();
 
         // 清空正在连接或握手的列表
+        // 必须显式指定断开，以保证会主动断开正在进行的连接
+        // 因为正在进行的连接会增加connection的引用计数
+        for(std::list<connection::ptr_t>::iterator iter = event_timer_.connecting_list.begin();
+            iter != event_timer_.connecting_list.end();
+            ++ iter) {
+            (*iter)->disconnect();        
+        }
+        
         event_timer_.connecting_list.clear();
 
         // 重置自身的endpoint
@@ -167,10 +175,16 @@ namespace atbus {
             self_->reset();
         }
 
+        // 引用的数据(正在进行的连接)也必须全部释放完成
+        adapter::loop_t* origin_ev_loop = get_evloop();
+        while(!ref_objs_.empty()) {
+            UV_RUN_ONCE(origin_ev_loop, UV_RUN_ONCE);
+        }
+        
         // 基础数据
-        iostream_channel_.reset();
+        iostream_channel_.reset(); // 这里结束后就不会再触发回调了
         iostream_conf_.reset();
-
+        
         if (NULL != ev_loop_) {
             ev_loop_ = NULL;
         }
@@ -956,6 +970,18 @@ namespace atbus {
 
     node::evt_msg_t::on_recv_msg_fn_t node::get_on_recv_handle() const {
         return event_msg_.on_recv_msg;
+    }
+    
+    void node::ref_object(void* obj) {
+        if (NULL == obj) {
+            return;    
+        }
+        
+        ref_objs_.insert(obj);
+    }
+    
+    void node::unref_object(void* obj) {
+        ref_objs_.erase(obj);
     }
 
     endpoint* node::find_child(endpoint_collection_t& coll, bus_id_t id) {

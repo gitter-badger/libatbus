@@ -153,6 +153,7 @@ namespace atbus {
             typedef enum {
                 EN_CF_IS_LOOP_OWNER = 0,
                 EN_CF_CLOSING,
+                EN_CF_IN_CALLBACK,
                 EN_CF_MAX,
             } flag_t;
 
@@ -172,10 +173,6 @@ namespace atbus {
 
             // 自定义数据区域
             void* data;
-
-//#ifndef NDEBUG
-            std::map<intptr_t, const char*> pending_reqs;
-//#endif
         };
 
         #define ATBUS_CHANNEL_IOS_CHECK_FLAG(f, v) (0 != ((f) & (1<< (v))))
