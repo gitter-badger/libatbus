@@ -212,10 +212,10 @@ CASE_TEST(atbus_node_reg, destruct)
             }
         }
 
-        //for (int i = 0; i < 16; ++i) {
-        //    uv_run(conf.ev_loop, UV_RUN_NOWAIT);
-        //    CASE_THREAD_SLEEP_MS(4);
-        //}
+        for (int i = 0; i < 16; ++i) {
+            uv_run(conf.ev_loop, UV_RUN_NOWAIT);
+            CASE_THREAD_SLEEP_MS(4);
+        }
 
         // reset shared_ptr and delete it 
         node1.reset();

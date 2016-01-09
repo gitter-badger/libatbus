@@ -16,6 +16,7 @@
 #include <utility>
 #include <ostream>
 #include <string>
+#include <map>
 
 #include "std/smart_ptr.h"
 
@@ -171,12 +172,19 @@ namespace atbus {
 
             // 自定义数据区域
             void* data;
+
+//#ifndef NDEBUG
+            std::map<intptr_t, const char*> pending_reqs;
+//#endif
         };
 
         #define ATBUS_CHANNEL_IOS_CHECK_FLAG(f, v) (0 != ((f) & (1<< (v))))
         #define ATBUS_CHANNEL_IOS_SET_FLAG(f, v) (f) |= (1 << (v))
         #define ATBUS_CHANNEL_IOS_UNSET_FLAG(f, v) (f) &= ~(1 << (v))
         #define ATBUS_CHANNEL_IOS_CLEAR_FLAG(f) (f) = 0
+
+        #define ATBUS_CHANNEL_REG_REQ(channel, req) (channel)->pending_reqs[reinterpret_cast<intptr_t>(req)] = __FUNCTION__
+        #define ATBUS_CHANNEL_UNREG_REQ(channel, req) (channel)->pending_reqs.erase(reinterpret_cast<intptr_t>(req))
     }
 }
 
