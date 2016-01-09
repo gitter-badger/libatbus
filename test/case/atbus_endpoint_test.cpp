@@ -136,6 +136,10 @@ CASE_TEST(atbus_endpoint, get_connection)
     char* buffer = new char[conf.recv_buffer_size];
     char addr[32] = { 0 };
     UTIL_STRFUNC_SNPRINTF(addr, sizeof(addr), "mem://0x%p", buffer);
+    if (addr[8] == '0' && addr[9] == 'x') {
+        memset(addr, 0, sizeof(addr));
+        UTIL_STRFUNC_SNPRINTF(addr, sizeof(addr), "mem://%p", buffer);
+    }
 
     // 排除未完成连接
     {

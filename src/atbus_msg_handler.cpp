@@ -165,7 +165,7 @@ namespace atbus {
             return EN_ATBUS_ERR_SUCCESS;
         }
 
-        if (m.body.forward->router.size() >= n.get_conf().ttl) {
+        if (m.body.forward->router.size() >= static_cast<size_t>(n.get_conf().ttl)) {
             return send_transfer_rsp(n, m, EN_ATBUS_ERR_ATNODE_TTL);
         }
 

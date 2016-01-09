@@ -20,7 +20,7 @@
 
 #include "frame/test_macros.h"
 
-#include <varargs.h>
+#include <stdarg.h>
 
 static void node_test_on_debug(const char* file_path, size_t line, const atbus::node& n, const atbus::endpoint* ep, const atbus::connection* conn, const char* fmt, ...) {
     size_t offset = 0;
