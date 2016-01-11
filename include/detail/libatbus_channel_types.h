@@ -19,6 +19,7 @@
 #include <map>
 
 #include "std/smart_ptr.h"
+#include "lock/seq_alloc.h"
 
 #include "libatbus_config.h"
 #include "libatbus_adapter_libuv.h"
@@ -170,18 +171,24 @@ namespace atbus {
 
             int error_code; // 记录外部的错误码
             // 统计信息
+            util::lock::seq_alloc_u32           active_reqs; // 正在进行的req数量
 
             // 自定义数据区域
             void* data;
         };
 
-        #define ATBUS_CHANNEL_IOS_CHECK_FLAG(f, v) (0 != ((f) & (1<< (v))))
-        #define ATBUS_CHANNEL_IOS_SET_FLAG(f, v) (f) |= (1 << (v))
-        #define ATBUS_CHANNEL_IOS_UNSET_FLAG(f, v) (f) &= ~(1 << (v))
-        #define ATBUS_CHANNEL_IOS_CLEAR_FLAG(f) (f) = 0
+#define ATBUS_CHANNEL_IOS_CHECK_FLAG(f, v) (0 != ((f) & (1<< (v))))
+#define ATBUS_CHANNEL_IOS_SET_FLAG(f, v) (f) |= (1 << (v))
+#define ATBUS_CHANNEL_IOS_UNSET_FLAG(f, v) (f) &= ~(1 << (v))
+#define ATBUS_CHANNEL_IOS_CLEAR_FLAG(f) (f) = 0
 
-        #define ATBUS_CHANNEL_REG_REQ(channel, req) (channel)->pending_reqs[reinterpret_cast<intptr_t>(req)] = __FUNCTION__
-        #define ATBUS_CHANNEL_UNREG_REQ(channel, req) (channel)->pending_reqs.erase(reinterpret_cast<intptr_t>(req))
+#define ATBUS_CHANNEL_REQ_START(channel) (channel)->active_reqs.inc()
+#define ATBUS_CHANNEL_REQ_ACTIVE(channel) ((channel)->active_reqs.get() > 0)
+
+#define ATBUS_CHANNEL_REQ_END(channel) \
+            assert(ATBUS_CHANNEL_REQ_ACTIVE(channel)); \
+            (channel)->active_reqs.dec()
+
     }
 }
 

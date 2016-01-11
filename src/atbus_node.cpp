@@ -161,10 +161,10 @@ namespace atbus {
         // 清空正在连接或握手的列表
         // 必须显式指定断开，以保证会主动断开正在进行的连接
         // 因为正在进行的连接会增加connection的引用计数
-        for(std::list<connection::ptr_t>::iterator iter = event_timer_.connecting_list.begin();
+        for(evt_timer_t::timer_desc_ls<connection::ptr_t>::type::iterator iter = event_timer_.connecting_list.begin();
             iter != event_timer_.connecting_list.end();
             ++ iter) {
-            (*iter)->disconnect();        
+            iter->second->disconnect();        
         }
         
         event_timer_.connecting_list.clear();
@@ -178,7 +178,7 @@ namespace atbus {
         // 引用的数据(正在进行的连接)也必须全部释放完成
         adapter::loop_t* origin_ev_loop = get_evloop();
         while(!ref_objs_.empty()) {
-            UV_RUN_ONCE(origin_ev_loop, UV_RUN_ONCE);
+            uv_run(origin_ev_loop, UV_RUN_ONCE);
         }
         
         // 基础数据

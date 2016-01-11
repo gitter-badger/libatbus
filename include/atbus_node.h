@@ -373,7 +373,7 @@ namespace atbus {
         util::lock::seq_alloc_u32 msg_seq_alloc_;
 
         // 引用的资源标记（释放时要保证这些资源引用被移除）
-        std::set<intptr_t> ref_objs_;
+        std::set<void*> ref_objs_;
         
         // ============ IO事件数据 ============
         // 事件分发器

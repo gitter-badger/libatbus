@@ -80,7 +80,7 @@ namespace atbus {
             
             io_stream_flag_guard(const io_stream_flag_guard& other);
             io_stream_flag_guard& operator=(const io_stream_flag_guard& other);
-        }
+        };
 
         static inline void io_stream_channel_callback(
                 io_stream_callback_evt_t::mem_fn_t fn, io_stream_channel* channel, io_stream_callback_t async_callback,
@@ -232,11 +232,12 @@ namespace atbus {
                     uv_run(channel->ev_loop, UV_RUN_ONCE);
                 }
 
-                // 先清理掉所有可以完成的事件，防止有未完成的request
-                // TODO 测试各种情况下，是否可能进入死循环
-                while (uv_run(channel->ev_loop, UV_RUN_NOWAIT)) {
+                // 必须等待所有pending的request完成
+                // 不能简单地用uv_loop_t的active状态判定，因为可能内部会维护uv_async_t来
+                while (ATBUS_CHANNEL_REQ_ACTIVE(channel)) {
                     uv_run(channel->ev_loop, UV_RUN_ONCE);
                 }
+
             }
 
             channel->ev_loop = NULL;
@@ -550,6 +551,8 @@ namespace atbus {
 
             io_stream_channel* channel = conn_raw_ptr->channel;
             assert(channel);
+            // 被动断开也会触发回调，这里的流程不计数active的req
+
             io_stream_flag_guard flag_guard(channel->flags, io_stream_channel::EN_CF_IN_CALLBACK);
 
             io_stream_channel::conn_pool_t::iterator iter = channel->conn_pool.end();
@@ -585,20 +588,13 @@ namespace atbus {
             delete ptr;
         }
 
-        //static void io_stream_connection_on_shutdown(uv_shutdown_t* req, int status) {
-        //    uv_close(reinterpret_cast<uv_handle_t*>(req->handle), io_stream_connection_on_close);
-
-        //    // 故意一次重复调用，保证资源被释放
-        //    // io_stream_connection_on_close( reinterpret_cast<adapter::handle_t*>(req->handle));
-
-        //    delete req;
-        //}
-
         // 删除函数，stream绑定在connection上
         static int io_stream_shutdown_ev_handle(io_stream_connection* conn) {
             assert(conn && conn->handle);
             assert(conn->handle->data == conn);
 
+            //ATBUS_CHANNEL_REQ_START(conn->channel);
+            // 被动断开也会触发回调，这里的流程不计数active的req
             uv_close(reinterpret_cast<uv_handle_t*>(conn->handle.get()), io_stream_connection_on_close);
 
             return 0;
@@ -684,10 +680,6 @@ namespace atbus {
 
             // 到这里必须已经释放handle了，否则删除hanlde会导致数据异常。
             assert(uv_is_closing(reinterpret_cast<adapter::handle_t*>(handle)));
-//            if(0 == uv_is_closing(reinterpret_cast<adapter::handle_t*>(handle))) {
-//                uv_close(reinterpret_cast<adapter::handle_t*>(handle), io_stream_connection_on_close);
-//            }
-
             delete real_conn;
         }
 
@@ -882,6 +874,9 @@ namespace atbus {
         static void io_stream_dns_connection_cb(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
             io_stream_dns_async_data* async_data = reinterpret_cast<io_stream_dns_async_data*>(req->data);
             assert(async_data);
+            assert(async_data->channel);
+
+            ATBUS_CHANNEL_REQ_END(async_data->channel);
             
             io_stream_flag_guard flag_guard(async_data->channel->flags, io_stream_channel::EN_CF_IN_CALLBACK);
             
@@ -1068,6 +1063,7 @@ namespace atbus {
                     delete async_data;
                     return EN_ATBUS_ERR_DNS_GETADDR_FAILED;
                 }
+                ATBUS_CHANNEL_REQ_START(async_data->channel);
 
                 return EN_ATBUS_ERR_SUCCESS;
             }
@@ -1079,6 +1075,8 @@ namespace atbus {
             io_stream_connect_async_data* async_data = reinterpret_cast<io_stream_connect_async_data*>(req->data);
             assert(async_data);
             assert(async_data->channel);
+            ATBUS_CHANNEL_REQ_END(async_data->channel);
+
             io_stream_flag_guard flag_guard(async_data->channel->flags, io_stream_channel::EN_CF_IN_CALLBACK);
 
             int errcode = EN_ATBUS_ERR_SUCCESS;
@@ -1137,7 +1135,10 @@ namespace atbus {
         static void io_stream_dns_connect_cb(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
             io_stream_dns_async_data* async_data = reinterpret_cast<io_stream_dns_async_data*>(req->data);
             assert(async_data);
-            
+            assert(async_data->channel);
+
+            ATBUS_CHANNEL_REQ_END(async_data->channel);
+
             io_stream_flag_guard flag_guard(async_data->channel->flags, io_stream_channel::EN_CF_IN_CALLBACK);
             
             int listen_res = status;
@@ -1246,7 +1247,10 @@ namespace atbus {
                     }
 
                     io_stream_tcp_setup(channel, handle);
+                    ATBUS_CHANNEL_REQ_START(async_data->channel);
                     if(0 != uv_tcp_connect(&async_data->req, handle, sock_addr_ptr, io_stream_all_connected_cb)) {
+                        ATBUS_CHANNEL_REQ_END(async_data->channel);
+
                         ret = EN_ATBUS_ERR_SOCK_CONNECT_FAILED;
                         break;
                     }
@@ -1287,6 +1291,7 @@ namespace atbus {
                     // 不会失败
                     io_stream_pipe_setup(channel, handle);
 
+                    ATBUS_CHANNEL_REQ_START(async_data->channel);
                     uv_pipe_connect(&async_data->req, handle, addr.host.c_str(), io_stream_all_connected_cb);
                     
                     return ret;
@@ -1312,6 +1317,7 @@ namespace atbus {
                     delete async_data;
                     return EN_ATBUS_ERR_DNS_GETADDR_FAILED;
                 }
+                ATBUS_CHANNEL_REQ_START(channel);
 
                 return EN_ATBUS_ERR_SUCCESS;
             }
@@ -1353,6 +1359,8 @@ namespace atbus {
             io_stream_connection* connection = reinterpret_cast<io_stream_connection*>(req->data);
             assert(connection);
             assert(connection->channel);
+
+            ATBUS_CHANNEL_REQ_END(connection->channel);
             
             io_stream_flag_guard flag_guard(connection->channel->flags, io_stream_channel::EN_CF_IN_CALLBACK);
             
@@ -1448,6 +1456,7 @@ namespace atbus {
                 connection->write_buffers.pop_back(total_buffer_size, true);
                 return EN_ATBUS_ERR_WRITE_FAILED;
             }
+            ATBUS_CHANNEL_REQ_START(connection->channel);
 
             // libuv调用失败时，直接返回底层错误。因为libuv内部也维护了一个发送队列，所以不会受到TCP发送窗口的限制
             return EN_ATBUS_ERR_SUCCESS;
