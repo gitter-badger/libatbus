@@ -51,7 +51,10 @@ namespace atbus {
 
     node::~node() {
         ATBUS_FUNC_NODE_DEBUG(*this, NULL, NULL, "node destroyed");
-        reset();
+
+        if (state_t::CREATED != state_) {
+            reset();
+        }
     }
 
     void node::default_conf(conf_t* conf) {
@@ -85,7 +88,9 @@ namespace atbus {
     }
 
     int node::init(bus_id_t id, const conf_t* conf) {
-        reset();
+        if (state_t::CREATED != state_) {
+            reset();
+        }
 
         if (NULL == conf) {
             default_conf(&conf_);
@@ -176,9 +181,8 @@ namespace atbus {
         }
 
         // 引用的数据(正在进行的连接)也必须全部释放完成
-        adapter::loop_t* origin_ev_loop = get_evloop();
         while(!ref_objs_.empty()) {
-            uv_run(origin_ev_loop, UV_RUN_ONCE);
+            uv_run(get_evloop(), UV_RUN_ONCE);
         }
         
         // 基础数据

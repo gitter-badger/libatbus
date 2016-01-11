@@ -134,6 +134,8 @@ CASE_TEST(atbus_endpoint, get_connection)
     conf.recv_buffer_size = 64 * 1024;
 
     char* buffer = new char[conf.recv_buffer_size];
+    memset(buffer, -1, sizeof(conf.recv_buffer_size)); // init it and then valgrind will noe report uninitialised used
+
     char addr[32] = { 0 };
     UTIL_STRFUNC_SNPRINTF(addr, sizeof(addr), "mem://0x%p", buffer);
     if (addr[8] == '0' && addr[9] == 'x') {
