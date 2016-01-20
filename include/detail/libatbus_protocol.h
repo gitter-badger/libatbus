@@ -54,13 +54,22 @@ namespace atbus {
             ATBUS_MACRO_BUSID_TYPE to;                  // ID: 1
             std::vector<ATBUS_MACRO_BUSID_TYPE> router; // ID: 2
             bin_data_block content;                     // ID: 3
+            int flags;                                  // ID: 4 | require a response message even success
 
-            forward_data(): from(0), to(0) {
+            enum flag_t {
+                FLAG_REQUIRE_RSP = 0,
+            };
+
+            forward_data(): from(0), to(0), flags(0) {
                 content.size = 0;
                 content.ptr = NULL;
             }
 
-            MSGPACK_DEFINE(from, to, router, content);
+            inline bool check_flag(flag_t f) { return 0 != (flags & (1 << f)); }
+            inline void set_flag(flag_t f) { flags |= (1 << f); }
+            inline void unset_flag(flag_t f) { flags &= ~(1 << f); }
+
+            MSGPACK_DEFINE(from, to, router, content, flags);
         };
 
         struct channel_data {

@@ -190,11 +190,12 @@ namespace atbus {
          * @param type 自定义类型，将作为msg.head.type字段传递。可用于业务区分服务类型
          * @param buffer 数据块地址
          * @param s 数据块长度
+         * @param require_rsp 是否强制需要回包（默认情况下如果发送成功是没有回包通知的）
          * @return 0或错误码
          * @note 接收端收到的数据很可能不是地址对齐的，所以这里不建议发送内存数据
          *       如果非要发送内存数据的话，一定要memcpy，不能直接类型转换，除非手动设置了地址对齐规则
          */
-        int send_data(bus_id_t tid, int type, const void* buffer, size_t s);
+        int send_data(bus_id_t tid, int type, const void* buffer, size_t s, bool require_rsp = false);
 
         /**
          * @brief 发送数据消息

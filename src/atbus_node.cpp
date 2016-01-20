@@ -432,7 +432,7 @@ namespace atbus {
         return EN_ATBUS_ERR_ATNODE_NOT_FOUND;
     }
 
-    int node::send_data(bus_id_t tid, int type, const void* buffer, size_t s) {
+    int node::send_data(bus_id_t tid, int type, const void* buffer, size_t s, bool require_rsp) {
         if (s >= conf_.msg_size) {
             return EN_ATBUS_ERR_BUFF_LIMIT;
         }
@@ -454,6 +454,9 @@ namespace atbus {
         m.body.forward->to = tid;
         m.body.forward->content.ptr = buffer;
         m.body.forward->content.size = s;
+        if (require_rsp) {
+            m.body.forward->set_flag(atbus::protocol::forward_data::FLAG_REQUIRE_RSP);
+        }
 
         return send_data_msg(tid, m);
     }

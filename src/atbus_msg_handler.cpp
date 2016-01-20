@@ -162,6 +162,10 @@ namespace atbus {
         if (m.body.forward->to == n.get_id()) {
             ATBUS_FUNC_NODE_DEBUG(n, (NULL == conn?NULL: conn->get_binding()), conn, "node recv data length = %lld", static_cast<unsigned long long>(m.body.forward->content.size));
             n.on_recv_data(conn, m.head.type, m.body.forward->content.ptr, m.body.forward->content.size);
+
+            if (m.body.forward->check_flag(atbus::protocol::forward_data::FLAG_REQUIRE_RSP)) {
+                return send_transfer_rsp(n, m, EN_ATBUS_ERR_SUCCESS);
+            }
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -183,7 +187,7 @@ namespace atbus {
                 protocol::conn_data* new_conn = conn_syn_m.body.make_body(conn_syn_m.body.conn);
                 if (NULL == new_conn) {
                     ATBUS_FUNC_NODE_ERROR(n, NULL, NULL, EN_ATBUS_ERR_MALLOC, 0);
-                    return EN_ATBUS_ERR_MALLOC;
+                    return send_transfer_rsp(n, m, EN_ATBUS_ERR_MALLOC);
                 }
 
                 const std::list<std::string>& listen_addrs = to_ep->get_listen();
@@ -201,14 +205,10 @@ namespace atbus {
                 }
             }
 
-            if (res < 0) {
-                ATBUS_FUNC_NODE_ERROR(n, NULL, NULL, res, 0);
-            }
-
             return res;
         }
 
-        // 直接兄弟节点转发失败，并且来自于父节点，则转发送给父节点(父节点也会被判定为兄弟节点)
+        // 直接兄弟节点转发失败，并且不来自于父节点，则转发送给父节点(父节点也会被判定为兄弟节点)
         // 如果失败可能是兄弟节点的连接未完成，但是endpoint已建立，所以直接发给父节点
         if (res < 0 && false == n.is_parent_node(m.head.src_bus_id) && n.is_brother_node(m.body.forward->to)) {
             // 如果失败的发送目标已经是父节点则不需要重发
@@ -218,14 +218,15 @@ namespace atbus {
             }
         }
 
-        // 只有失败才下发通知，类似ICMP协议
-        if (res < 0) {
+        // 只有失败或请求方要求回包，才下发通知，类似ICMP协议
+        if (res < 0 || m.body.forward->check_flag(atbus::protocol::forward_data::FLAG_REQUIRE_RSP)) {
             res = send_transfer_rsp(n, m, res);
         }
         
         if (res < 0) {
             ATBUS_FUNC_NODE_ERROR(n, NULL, NULL, res, 0);
         }
+
         return res;
     }
 
