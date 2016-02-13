@@ -337,6 +337,9 @@ namespace atbus {
         void set_on_recv_handle(evt_msg_t::on_recv_msg_fn_t fn);
         evt_msg_t::on_recv_msg_fn_t get_on_recv_handle() const;
         
+        void set_on_shutdown_handle(evt_msg_t::on_node_down_fn_t fn);
+        evt_msg_t::on_node_down_fn_t get_on_shutdown_handle() const;
+        
         void ref_object(void*);
         void unref_object(void*);
         

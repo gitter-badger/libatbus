@@ -979,6 +979,14 @@ namespace atbus {
         return event_msg_.on_recv_msg;
     }
     
+    void node::set_on_shutdown_handle(evt_msg_t::on_node_down_fn_t fn) {
+        event_msg_.on_node_down = fn;
+    }
+    
+    evt_msg_t::on_node_down_fn_t node::get_on_shutdown_handle() const {
+        return event_msg_.on_node_down;
+    }
+    
     void node::ref_object(void* obj) {
         if (NULL == obj) {
             return;    
