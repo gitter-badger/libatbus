@@ -10,12 +10,12 @@
 enum ATBUS_PROTOCOL_CMD {
     ATBUS_CMD_INVALID = 0,
 
-    //  数据协议
+    //  鏁版嵁鍗忚
     ATBUS_CMD_DATA_TRANSFORM_REQ = 1,
     ATBUS_CMD_DATA_TRANSFORM_RSP,
     ATBUS_CMD_CUSTOM_CMD_REQ,
 
-    // 节点控制协议
+    // 鑺傜偣鎺у埗鍗忚
     ATBUS_CMD_NODE_SYNC_REQ = 9,
     ATBUS_CMD_NODE_SYNC_RSP,
     ATBUS_CMD_NODE_REG_REQ,
@@ -273,6 +273,11 @@ namespace msgpack {
                             body_obj.convert(*v.body.make_body(v.body.forward));
                             break;
                         }
+                        
+                        case ATBUS_CMD_CUSTOM_CMD_REQ: {
+                            body_obj.convert(*v.body.make_body(v.body.custom));
+                            break;
+                        }
 
                         case ATBUS_CMD_NODE_SYNC_RSP: {
                             body_obj.convert(*v.body.make_body(v.body.sync));
@@ -325,6 +330,15 @@ namespace msgpack {
                             o.pack_nil();
                         } else {
                             o.pack(*v.body.forward);
+                        }
+                        break;
+                    }
+                    
+                    case ATBUS_CMD_CUSTOM_CMD_REQ: {
+                        if (NULL == v.body.custom) {
+                            o.pack_nil();
+                        } else {
+                            o.pack(*v.body.custom);
                         }
                         break;
                     }
@@ -397,6 +411,15 @@ namespace msgpack {
                             o.via.map.ptr[1].val = msgpack::object();
                         } else {
                             v.body.forward->msgpack_object(&o.via.map.ptr[1].val, o.zone);
+                        }
+                        break;
+                    }
+                    
+                    case ATBUS_CMD_CUSTOM_CMD_REQ: {
+                        if (NULL == v.body.custom) {
+                            o.via.map.ptr[1].val = msgpack::object();
+                        } else {
+                            v.body.custom->msgpack_object(&o.via.map.ptr[1].val, o.zone);
                         }
                         break;
                     }

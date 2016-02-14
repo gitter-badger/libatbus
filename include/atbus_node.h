@@ -99,6 +99,8 @@ namespace atbus {
             typedef std::function<int(const node&, int)> on_node_up_fn_t;
             typedef std::function<int(const node&, const connection*, int)> on_invalid_connection_fn_t;
             typedef std::function<int(const node&, const endpoint*, const connection*, bus_id_t, const std::vector<std::pair<const void*, size_t> >&)> on_custom_cmd_fn_t;
+            typedef std::function<int(const node&, endpoint*, int)> on_add_endpoint_fn_t;
+            typedef std::function<int(const node&, endpoint*, int)> on_remove_endpoint_fn_t;
 
             on_recv_msg_fn_t on_recv_msg;
             on_error_fn_t on_error;
@@ -107,6 +109,8 @@ namespace atbus {
             on_node_up_fn_t on_node_up;
             on_invalid_connection_fn_t on_invalid_connection;
             on_custom_cmd_fn_t on_custom_cmd;
+            on_add_endpoint_fn_t on_endpoint_added;
+            on_remove_endpoint_fn_t on_endpoint_removed;
         } ;
 
         // ================== 用这个来取代C++继承，减少层次结构 ==================
@@ -215,6 +219,16 @@ namespace atbus {
          */
         int send_data_msg(bus_id_t tid, atbus::protocol::msg& mb, endpoint** ep_out, connection** conn_out);
 
+        /**
+         * @brief 发送自定义命令消息
+         * @param tid 发送目标ID
+         * @param arr_buf 自定义消息内容数组
+         * @param arr_size 自定义消息内容长度
+         * @param arr_count 自定义消息数组个数
+         * @return 0或错误码
+         */
+        int send_custom_cmd(bus_id_t tid, const void* arr_buf[], size_t arr_size[], size_t arr_count);
+        
         /**
          * @brief 发送控制消息
          * @param tid 发送目标ID
@@ -339,6 +353,9 @@ namespace atbus {
         
         void set_on_shutdown_handle(evt_msg_t::on_node_down_fn_t fn);
         evt_msg_t::on_node_down_fn_t get_on_shutdown_handle() const;
+        
+        void set_on_custom_cmd_handle(evt_msg_t::on_custom_cmd_fn_t fn);
+        evt_msg_t::on_custom_cmd_fn_t get_on_custom_cmd_handle() const;
         
         void ref_object(void*);
         void unref_object(void*);

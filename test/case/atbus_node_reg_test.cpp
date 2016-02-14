@@ -122,6 +122,7 @@ CASE_TEST(atbus_node_reg, reset_and_send)
             }
         }
 
+        // 兄弟节点消息转发测试
         std::string send_data;
         send_data.assign("abcdefg\0hello world!\n", sizeof("abcdefg\0hello world!\n") - 1);
 
@@ -252,25 +253,25 @@ CASE_TEST(atbus_node_reg, reg_success)
     conf.ev_loop = &ev_loop;
 
     {
-        atbus::node::ptr_t node_father = atbus::node::create();
+        atbus::node::ptr_t node_parent = atbus::node::create();
         atbus::node::ptr_t node_child = atbus::node::create();
-        node_father->on_debug = node_reg_test_on_debug;
+        node_parent->on_debug = node_reg_test_on_debug;
         node_child->on_debug = node_reg_test_on_debug;
 
-        node_father->init(0x12345678, &conf);
+        node_parent->init(0x12345678, &conf);
         
         conf.children_mask = 24;
         conf.father_address = "ipv4://127.0.0.1:16387";
         node_child->init(0x12346789, &conf);
 
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_father->listen("ipv4://127.0.0.1:16387"));
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->listen("ipv4://127.0.0.1:16387"));
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child->listen("ipv4://127.0.0.1:16388"));
 
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_father->start());
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->start());
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child->start());
 
         time_t proc_t = time(NULL);
-        node_father->proc(proc_t + 1, 0);
+        node_parent->proc(proc_t + 1, 0);
         node_child->proc(proc_t + 1, 0);
 
         // 注册成功自动会有可用的端点
@@ -278,8 +279,8 @@ CASE_TEST(atbus_node_reg, reg_success)
             uv_run(conf.ev_loop, UV_RUN_ONCE);
             CASE_THREAD_SLEEP_MS(16);
 
-            atbus::endpoint* ep1 = node_child->get_endpoint(node_father->get_id());
-            atbus::endpoint* ep2 = node_father->get_endpoint(node_child->get_id());
+            atbus::endpoint* ep1 = node_child->get_endpoint(node_parent->get_id());
+            atbus::endpoint* ep2 = node_parent->get_endpoint(node_child->get_id());
 
             if (NULL != ep1 && NULL != ep2 && NULL != ep1->get_data_connection(ep2) && NULL != ep2->get_data_connection(ep1)) {
                 break;
@@ -318,14 +319,14 @@ CASE_TEST(atbus_node_reg, conflict)
     
     // 只有发生冲突才会注册不成功，否则会无限重试注册父节点，直到其上线
     {
-        atbus::node::ptr_t node_father = atbus::node::create();
+        atbus::node::ptr_t node_parent = atbus::node::create();
         atbus::node::ptr_t node_child = atbus::node::create();
         atbus::node::ptr_t node_child_fail = atbus::node::create();
-        node_father->on_debug = node_reg_test_on_debug;
+        node_parent->on_debug = node_reg_test_on_debug;
         node_child->on_debug = node_reg_test_on_debug;
         node_child_fail->on_debug = node_reg_test_on_debug;
 
-        node_father->init(0x12345678, &conf);
+        node_parent->init(0x12345678, &conf);
         
         conf.children_mask = 24;
         conf.father_address = "ipv4://127.0.0.1:16387";
@@ -336,18 +337,18 @@ CASE_TEST(atbus_node_reg, conflict)
         node_child_fail->set_on_shutdown_handle(node_test_on_shutdown);
         g_node_test_on_shutdown_check_reason = EN_ATBUS_ERR_ATNODE_INVALID_ID;
         
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_father->listen("ipv4://127.0.0.1:16387"));
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->listen("ipv4://127.0.0.1:16387"));
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child->listen("ipv4://127.0.0.1:16388"));
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child_fail->listen("ipv4://127.0.0.1:16389"));
 
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_father->start());
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->start());
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child->start());
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child_fail->start());
 
         time_t proc_t = time(NULL) + 1;
         // 必然有一个失败的
         while (atbus::node::state_t::CREATED != node_child->get_state() && atbus::node::state_t::CREATED != node_child_fail->get_state()) {
-            node_father->proc(proc_t, 0);
+            node_parent->proc(proc_t, 0);
             node_child->proc(proc_t, 0);
             node_child_fail->proc(proc_t, 0);
             
@@ -356,7 +357,7 @@ CASE_TEST(atbus_node_reg, conflict)
         }
         
         // 注册到子节点失败不会导致下线的流程测试
-        CASE_EXPECT_EQ(atbus::node::state_t::RUNNING, node_father->get_state());
+        CASE_EXPECT_EQ(atbus::node::state_t::RUNNING, node_parent->get_state());
     }
 
     while (UV_EBUSY == uv_loop_close(&ev_loop)) {
@@ -377,12 +378,12 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
     
     // 只有发生冲突才会注册不成功，否则会无限重试注册父节点，直到其上线
     {
-        atbus::node::ptr_t node_father = atbus::node::create();
+        atbus::node::ptr_t node_parent = atbus::node::create();
         atbus::node::ptr_t node_child = atbus::node::create();
-        node_father->on_debug = node_reg_test_on_debug;
+        node_parent->on_debug = node_reg_test_on_debug;
         node_child->on_debug = node_reg_test_on_debug;
 
-        node_father->init(0x12345678, &conf);
+        node_parent->init(0x12345678, &conf);
         
         conf.children_mask = 24;
         conf.father_address = "ipv4://127.0.0.1:16387";
@@ -391,16 +392,16 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
         node_child->set_on_shutdown_handle(node_test_on_shutdown);
         g_node_test_on_shutdown_check_reason = EN_ATBUS_ERR_ATNODE_INVALID_ID;
         
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_father->listen("ipv4://127.0.0.1:16387"));
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->listen("ipv4://127.0.0.1:16387"));
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child->listen("ipv4://127.0.0.1:16388"));
 
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_father->start());
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->start());
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child->start());
 
         time_t proc_t = time(NULL) + 1;
         // 先等连接成功
         while (atbus::node::state_t::RUNNING != node_child->get_state()) {
-            node_father->proc(proc_t, 0);
+            node_parent->proc(proc_t, 0);
             node_child->proc(proc_t, 0);
             
             uv_run(&ev_loop, UV_RUN_ONCE);
@@ -408,14 +409,14 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
         }
         
         // 关闭父节点
-        node_father->reset();
+        node_parent->reset();
         
         // 重连父节点，但是连接不成功也不会导致下线
         // 连接过程中的转态变化
         size_t retry_times = 0;
         while (atbus::node::state_t::RUNNING == node_child->get_state() || retry_times < 5) {
             proc_t += conf.retry_interval;
-            // node_father->proc(proc_t, 0);
+            // node_parent->proc(proc_t, 0);
             node_child->proc(proc_t, 0);
             
             if (atbus::node::state_t::RUNNING != node_child->get_state()) {
@@ -435,21 +436,21 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
         // 子节点断线后重新注册测试
         conf.children_mask = 16;
         conf.father_address = "";
-        node_father->init(0x12345678, &conf);
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_father->listen("ipv4://127.0.0.1:16387"));
-        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_father->start());
+        node_parent->init(0x12345678, &conf);
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->listen("ipv4://127.0.0.1:16387"));
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->start());
         
         while (atbus::node::state_t::RUNNING != node_child->get_state()) {
             proc_t += conf.retry_interval;
-            node_father->proc(proc_t, 0);
+            node_parent->proc(proc_t, 0);
             node_child->proc(proc_t, 0);
             
             uv_run(&ev_loop, UV_RUN_ONCE);
         }
         
         {
-            atbus::endpoint* ep1 = node_child->get_endpoint(node_father->get_id());
-            atbus::endpoint* ep2 = node_father->get_endpoint(node_child->get_id());
+            atbus::endpoint* ep1 = node_child->get_endpoint(node_parent->get_id());
+            atbus::endpoint* ep2 = node_parent->get_endpoint(node_child->get_id());
             
             CASE_EXPECT_NE(NULL, ep1);
             CASE_EXPECT_NE(NULL, ep2);
@@ -457,28 +458,10 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
         }
         
         // 注册到子节点失败不会导致下线的流程测试
-        CASE_EXPECT_EQ(atbus::node::state_t::RUNNING, node_father->get_state());
+        CASE_EXPECT_EQ(atbus::node::state_t::RUNNING, node_parent->get_state());
     }
 
     while (UV_EBUSY == uv_loop_close(&ev_loop)) {
         uv_run(&ev_loop, UV_RUN_ONCE);
     }
 }
-
-// TODO 连接未握手超时下线测试
-
-// TODO 定时Ping Pong协议测试
-// TODO 自定义命令协议测试
-
-// TODO 父子节点消息转发测试
-// TODO 兄弟节点消息转发测试
-// TODO 兄弟节点通过父节点转发消息并建立直连测试（测试路由）
-// TODO 兄弟节点通过多层父节点转发消息并不会建立直连测试
-// TODO 直连节点发送失败测试
-// TODO 发送给子节点转发失败的回复通知测试
-// TODO 发送给父节点转发失败的回复通知测试
-// TODO 发送给已下线兄弟节点并失败的回复通知测试（网络失败）
-
-
-// TODO 全量表第一次拉取测试
-// TODO 全量表通知给父节点和子节点测试

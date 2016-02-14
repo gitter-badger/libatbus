@@ -468,6 +468,37 @@ namespace atbus {
     int node::send_data_msg(bus_id_t tid, atbus::protocol::msg& mb, endpoint** ep_out, connection** conn_out) {
         return send_msg(tid, mb, &endpoint::get_data_connection, ep_out, conn_out);
     }
+    
+    int node::send_custom_cmd(bus_id_t tid, const void* arr_buf[], size_t arr_size[], size_t arr_count) {
+        size_t sum_len = sizeof(atbus::protocol::custom_command_data);
+        for (size_t i = 0; i < arr_count; ++ i) {
+            sum_len += arr_size[i];
+        }
+        
+        if (sum_len >= conf_.msg_size) {
+            return EN_ATBUS_ERR_BUFF_LIMIT;
+        }
+        
+        atbus::protocol::msg m;
+        m.init(get_id(), ATBUS_CMD_CUSTOM_CMD_REQ, type, 0, alloc_msg_seq());
+
+        if (NULL == m.body.make_body(m.body.custom)) {
+            return EN_ATBUS_ERR_MALLOC;
+        }
+        
+        m.body.custom->from = get_id();
+        m.body.custom->commands.reserve(arr_count);
+        
+        for (size_t i = 0; i < arr_count; ++ i) {
+            atbus::protocol::bin_data_block cmd;
+            cmd.ptr = arr_buf[i];
+            cmd.size = arr_size[i];
+            
+            m.body.custom->commands.push_back(cmd);
+        }
+        
+        return send_data_msg(tid, m);
+    }
 
     int node::send_ctrl_msg(bus_id_t tid, atbus::protocol::msg& mb) {
         return send_ctrl_msg(tid, mb, NULL, NULL);
@@ -588,6 +619,12 @@ namespace atbus {
                 if (state_t::CONNECTING_PARENT == state_) {
                     on_actived();
                 }
+                
+                // event
+                if (event_msg_.on_endpoint_added) {
+                    event_msg_.on_endpoint_added(*this, ep.get(), EN_ATBUS_ERR_SUCCESS);
+                }
+                
                 return EN_ATBUS_ERR_SUCCESS;
             } else {
                 // 父节点只能有一个
@@ -597,6 +634,7 @@ namespace atbus {
 
         // 兄弟节点(父节点会被判为可能是兄弟节点)
         if (is_brother_node(ep->get_id())) {
+            // event will be triggered in insert_child()
             if (insert_child(node_brother_, ep)) {
                 add_ping_timer(ep);
 
@@ -608,6 +646,7 @@ namespace atbus {
 
         // 子节点
         if (is_child_node(ep->get_id())) {
+            // event will be triggered in insert_child()
             if(insert_child(node_children_, ep)) {
                 add_ping_timer(ep);
 
@@ -624,13 +663,21 @@ namespace atbus {
     int node::remove_endpoint(bus_id_t tid) {
         // 父节点单独判定，由于防止测试兄弟节点
         if (is_parent_node(tid)) {
+            endpoint::ptr_t ep = node_father_.node_;
+            
             node_father_.node_.reset();
             state_ = state_t::LOST_PARENT;
+            
+            // event
+            if (event_msg_.on_endpoint_added) {
+                event_msg_.on_endpoint_added(*this, ep.get(), EN_ATBUS_ERR_SUCCESS);
+            }
             return EN_ATBUS_ERR_SUCCESS;
         }
 
         // 兄弟节点(父节点会被判为可能是兄弟节点)
         if (is_brother_node(tid)) {
+            // event will be triggered in remove_child()
             if (remove_child(node_brother_, tid)) {
                 return EN_ATBUS_ERR_SUCCESS;
             } else {
@@ -640,6 +687,7 @@ namespace atbus {
 
         // 子节点
         if (is_child_node(tid)) {
+            // event will be triggered in remove_child()
             if (remove_child(node_children_, tid)) {
                 // TODO 子节点下线上报
                 return EN_ATBUS_ERR_SUCCESS;
@@ -987,6 +1035,14 @@ namespace atbus {
         return event_msg_.on_node_down;
     }
     
+    void node::set_on_custom_cmd_handle(evt_msg_t::on_custom_cmd_fn_t fn) {
+        event_msg_.on_custom_cmd = fn;
+    }
+    
+    evt_msg_t::on_custom_cmd_fn_t node::get_on_custom_cmd_handle() const {
+        return event_msg_.on_custom_cmd;
+    }
+    
     void node::ref_object(void* obj) {
         if (NULL == obj) {
             return;    
@@ -1036,6 +1092,11 @@ namespace atbus {
             }
 
             coll[maskv] = ep;
+            
+            // event
+            if (event_msg_.on_endpoint_added) {
+                event_msg_.on_endpoint_added(*this, ep.get(), EN_ATBUS_ERR_SUCCESS);
+            }
             return true;
         }
 
@@ -1056,6 +1117,11 @@ namespace atbus {
         }
 
         coll[maskv] = ep;
+        
+        // event
+        if (event_msg_.on_endpoint_added) {
+            event_msg_.on_endpoint_added(*this, ep.get(), EN_ATBUS_ERR_SUCCESS);
+        }
         return true;
     }
 
@@ -1069,7 +1135,13 @@ namespace atbus {
             return false;
         }
 
+        endpoint::ptr_t ep = iter->second;
         coll.erase(iter);
+        
+        // event
+        if (event_msg_.on_endpoint_removed) {
+            event_msg_.on_endpoint_removed(*this, ep.get(), EN_ATBUS_ERR_SUCCESS);
+        }
         return true;
     }
 
