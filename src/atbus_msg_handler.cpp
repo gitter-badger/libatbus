@@ -237,6 +237,7 @@ namespace atbus {
         }
 
         ATBUS_FUNC_NODE_ERROR(n, conn->get_binding(), conn, m.head.ret, 0);
+        n.on_send_data_failed(conn->get_binding(), conn, &m);
 
         return EN_ATBUS_ERR_SUCCESS;
     }

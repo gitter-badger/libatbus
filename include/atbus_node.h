@@ -5,10 +5,10 @@
  *      Author: owent
  */
 
-#pragma once
-
 #ifndef LIBATBUS_NODE_H_
 #define LIBATBUS_NODE_H_
+
+#pragma once
 
 #include <bitset>
 #include <ctime>
@@ -33,7 +33,6 @@
 #include "atbus_endpoint.h"
 
 namespace atbus {
-
 
     class node CLASS_FINAL : public util::design_pattern::noncopyable {
     public:
@@ -93,6 +92,7 @@ namespace atbus {
 
         struct evt_msg_t {
             typedef std::function<int(const node&, const endpoint&, const connection&, int, const void*, size_t)> on_recv_msg_fn_t;
+            typedef std::function<int(const node&, const endpoint*, const connection*, const protocol::msg* m)> on_send_data_failed_fn_t;
             typedef std::function<int(const node&, const endpoint*, const connection*, int, int)> on_error_fn_t;
             typedef std::function<int(const node&, const endpoint*, const connection*, int)> on_reg_fn_t;
             typedef std::function<int(const node&, int)> on_node_down_fn_t;
@@ -103,6 +103,7 @@ namespace atbus {
             typedef std::function<int(const node&, endpoint*, int)> on_remove_endpoint_fn_t;
 
             on_recv_msg_fn_t on_recv_msg;
+            on_send_data_failed_fn_t on_send_data_failed;
             on_error_fn_t on_error;
             on_reg_fn_t on_reg;
             on_node_down_fn_t on_node_down;
@@ -325,6 +326,8 @@ namespace atbus {
 
         void on_recv_data(connection* conn, int type, const void* buffer, size_t s) const;
 
+        void on_send_data_failed(const endpoint*, const connection*, const protocol::msg* m);
+        
         int on_error(const char* file_path, size_t line, const endpoint*, const connection*, int, int);
         int on_disconnect(const connection*);
         int on_new_connection(connection*);
@@ -356,6 +359,9 @@ namespace atbus {
         
         void set_on_custom_cmd_handle(evt_msg_t::on_custom_cmd_fn_t fn);
         evt_msg_t::on_custom_cmd_fn_t get_on_custom_cmd_handle() const;
+        
+        void set_on_send_data_failed_handle(evt_msg_t::on_send_data_failed_fn_t fn);
+        evt_msg_t::on_send_data_failed_fn_t get_on_send_data_failed_handle() const;
         
         void ref_object(void*);
         void unref_object(void*);

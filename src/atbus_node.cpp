@@ -870,6 +870,12 @@ namespace atbus {
             }
         }
     }
+    
+    void node::on_send_data_failed(const endpoint* ep, const connection* conn, const protocol::msg* m) {
+        if (event_msg_.on_send_data_failed) {
+            event_msg_.on_send_data_failed(*this, ep, conn, m);
+        }
+    }
 
     int node::on_error(const char* file_path, size_t line, const endpoint* ep, const connection* conn, int status, int errcode) {
         if (NULL == ep && NULL != conn) {
@@ -898,12 +904,15 @@ namespace atbus {
             return EN_ATBUS_ERR_PARAMS;
         }
 
-        // 发送注册协议
-        int ret = msg_handler::send_reg(ATBUS_CMD_NODE_REG_REQ, *this, *conn, 0, 0);
-        if (ret < 0) {
-            ATBUS_FUNC_NODE_ERROR(*this, NULL, conn, ret, 0);
-            conn->reset();
-            return ret;
+        // 如果ID有效，则发送注册协议
+        // ID为0则是临时节点，不需要注册
+        if (get_id()) {
+            int ret = msg_handler::send_reg(ATBUS_CMD_NODE_REG_REQ, *this, *conn, 0, 0);
+            if (ret < 0) {
+                ATBUS_FUNC_NODE_ERROR(*this, NULL, conn, ret, 0);
+                conn->reset();
+                return ret;
+            }
         }
 
         return EN_ATBUS_ERR_SUCCESS;
@@ -1041,6 +1050,14 @@ namespace atbus {
     
     evt_msg_t::on_custom_cmd_fn_t node::get_on_custom_cmd_handle() const {
         return event_msg_.on_custom_cmd;
+    }
+    
+    void node::set_on_send_data_failed_handle(evt_msg_t::on_send_data_failed_fn_t fn) {
+        event_msg_.on_send_data_failed = fn;
+    }
+    
+    evt_msg_t::on_send_data_failed_fn_t node::get_on_send_data_failed_handle() const {
+        return event_msg_.on_send_data_failed;
     }
     
     void node::ref_object(void* obj) {

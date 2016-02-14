@@ -78,6 +78,23 @@ static int node_msg_test_recv_msg_test_record_fn(const atbus::node& n, const atb
     return 0;
 }
 
+static int node_msg_test_send_data_failed_fn(const atbus::node& n, const atbus::endpoint* ep, const atbus::connection* conn, 
+    const protocol::msg* m) {
+    recv_msg_history.n = &n;
+    recv_msg_history.ep = ep;
+    recv_msg_history.conn = conn;
+    recv_msg_history.status = NULL == m? 0: m->head.ret;
+    ++recv_msg_history.count;
+
+    if (NULL != buffer && len > 0) {
+        recv_msg_history.data.assign(reinterpret_cast<const char*>(buffer), len);
+    } else {
+        recv_msg_history.data.clear();
+    }
+
+    return 0;
+}
+
 // TODO 定时Ping Pong协议测试
 CASE_TEST(atbus_node_reg, ping_pong)
 {
@@ -456,6 +473,7 @@ CASE_TEST(atbus_node_reg, transfer_and_connect)
         std::string send_data;
         send_data.assign("transfer through parent\n", sizeof("transfer through parent\n") - 1);
         
+        int count = recv_msg_history.count;
         node_child_1->send_data(node_child_2->get_id(), 0, send_data.data(), send_data.size());
         for (int i = 0; i < 256; ++i) {
             uv_run(conf.ev_loop, UV_RUN_ONCE);
@@ -553,6 +571,7 @@ CASE_TEST(atbus_node_reg, transfer_only)
         std::string send_data;
         send_data.assign("transfer through parent only\n", sizeof("transfer through parent only\n") - 1);
         
+        int count = recv_msg_history.count;
         node_child_1->send_data(node_child_2->get_id(), 0, send_data.data(), send_data.size());
         for (int i = 0; i < 512; ++i) {
             uv_run(conf.ev_loop, UV_RUN_ONCE);
@@ -575,8 +594,115 @@ CASE_TEST(atbus_node_reg, transfer_only)
 }
 
 // TODO 直连节点发送失败测试
+CASE_TEST(atbus_node_reg, send_failed)
+{
+    atbus::node::conf_t conf;
+    atbus::node::default_conf(&conf);
+    conf.children_mask = 16;
+    uv_loop_t ev_loop;
+    uv_loop_init(&ev_loop);
+
+    conf.ev_loop = &ev_loop;
+    
+    {
+        atbus::node::ptr_t node_parent = atbus::node::create();
+        node_parent->on_debug = node_msg_test_on_debug;
+        node_parent->init(0x12345678, &conf);
+        
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->listen("ipv4://127.0.0.1:16387"));
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->start());
+        
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->start());
+        
+        std::string send_data;
+        send_data.assign("send failed", sizeof("send failed") - 1);
+        
+        // send to child failed
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_INVALID_ID, node_parent->send_data(0x12346780, 0, send_data.data(), send_data.size()));
+        // send to brother and failed
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_INVALID_ID, node_parent->send_data(0x12356789, 0, send_data.data(), send_data.size()));
+    }
+    
+    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
+        uv_run(&ev_loop, UV_RUN_ONCE);
+    }
+}
+
 // TODO 发送给子节点转发失败的回复通知测试
 // TODO 发送给父节点转发失败的回复通知测试
+CASE_TEST(atbus_node_reg, transfer_failed)
+{
+    atbus::node::conf_t conf;
+    atbus::node::default_conf(&conf);
+    conf.children_mask = 16;
+    uv_loop_t ev_loop;
+    uv_loop_init(&ev_loop);
+
+    conf.ev_loop = &ev_loop;
+    
+    // 只有发生冲突才会注册不成功，否则会无限重试注册父节点，直到其上线
+    {
+        atbus::node::ptr_t node_parent = atbus::node::create();
+        atbus::node::ptr_t node_child_1 = atbus::node::create();
+        node_parent->on_debug = node_msg_test_on_debug;
+        node_child_1->on_debug = node_msg_test_on_debug;
+
+        node_parent->init(0x12345678, &conf);
+        
+        conf.children_mask = 24;
+        conf.father_address = "ipv4://127.0.0.1:16387";
+        node_child_1->init(0x12346789, &conf);
+        
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->listen("ipv4://127.0.0.1:16387"));
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child_1->listen("ipv4://127.0.0.1:16388"));
+
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->start());
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child_1->start());
+
+        time_t proc_t = time(NULL) + 1;
+        node_child_1->set_on_recv_handle(node_msg_test_recv_msg_test_record_fn);
+        node_child_1->set_on_send_data_failed_handle(node_msg_test_send_data_failed_fn);
+        
+        // wait for register finished
+        for (int i = 0; i < 256; ++i) {
+            node_parent->proc(proc_t, 0);
+            node_child_1->proc(proc_t, 0);
+            
+            uv_run(conf.ev_loop, UV_RUN_ONCE);
+            CASE_THREAD_SLEEP_MS(16);
+
+            atbus::endpoint* ep1 = node_child_1->get_endpoint(node_parent->get_id());
+            atbus::endpoint* ep2 = node_parent->get_endpoint(node_child_1->get_id());
+
+            if (NULL != ep1 && NULL != ep2 && NULL != ep1->get_data_connection(ep2) && NULL != ep2->get_data_connection(ep1)) {
+                break;
+            }
+            
+            ++ proc_t;
+        }
+        
+        // 转发消息
+        std::string send_data;
+        send_data.assign("transfer through parent\n", sizeof("transfer through parent\n") - 1);
+        
+        int count = recv_msg_history.count;
+        node_child_1->send_data(0x12346780, 0, send_data.data(), send_data.size());
+        for (int i = 0; i < 256; ++i) {
+            uv_run(conf.ev_loop, UV_RUN_ONCE);
+            CASE_THREAD_SLEEP_MS(16);
+            if (count != recv_msg_history.count) {
+                break;
+            }
+        }
+
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_INVALID_ID, recv_msg_history.status);
+    }
+
+    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
+        uv_run(&ev_loop, UV_RUN_ONCE);
+    }
+}
+
 // TODO 发送给已下线兄弟节点并失败的回复通知测试（网络失败）
 
 
