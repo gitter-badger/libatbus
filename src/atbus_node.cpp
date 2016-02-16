@@ -439,7 +439,7 @@ namespace atbus {
 
         if(tid == get_id()) {
             // 发送给自己的数据直接回调数据接口
-            on_recv_data(NULL, type, buffer, s);
+            on_recv_data(get_self_endpoint(), NULL, type, buffer, s);
             return EN_ATBUS_ERR_SUCCESS;
         }
 
@@ -480,7 +480,7 @@ namespace atbus {
         }
         
         atbus::protocol::msg m;
-        m.init(get_id(), ATBUS_CMD_CUSTOM_CMD_REQ, type, 0, alloc_msg_seq());
+        m.init(get_id(), ATBUS_CMD_CUSTOM_CMD_REQ, 0, 0, alloc_msg_seq());
 
         if (NULL == m.body.make_body(m.body.custom)) {
             return EN_ATBUS_ERR_MALLOC;
@@ -524,7 +524,11 @@ namespace atbus {
         do {
             // 父节点单独判定，防止父节点被判定为兄弟节点
             if (node_father_.node_ && is_parent_node(tid)) {
-                conn = (self_.get()->*fn)(node_father_.node_.get());
+                endpoint* target = node_father_.node_.get();
+                conn = (self_.get()->*fn)(target);
+
+                ASSIGN_EPCONN(target);
+                break;
             }
 
             // 兄弟节点(父节点会被判为可能是兄弟节点)
@@ -591,7 +595,7 @@ namespace atbus {
 
         // 直连子节点
         if (is_child_node(tid)) {
-            endpoint* res = find_child(node_brother_, tid);
+            endpoint* res = find_child(node_children_, tid);
             if (NULL != res && res->get_id() == tid) {
                 return res;
             }
@@ -862,12 +866,13 @@ namespace atbus {
         }
     }
 
-    void node::on_recv_data(connection* conn, int type, const void* buffer, size_t s) const {
-        if (NULL != conn) {
-            endpoint* ep = conn->get_binding();
-            if (NULL != ep && event_msg_.on_recv_msg) {
-                event_msg_.on_recv_msg(*this, *ep, *conn, type, buffer, s);
-            }
+    void node::on_recv_data(const endpoint* ep, connection* conn, int type, const void* buffer, size_t s) const {
+        if (NULL == ep && NULL != conn) {
+            ep = conn->get_binding();
+        }
+
+        if (event_msg_.on_recv_msg) {
+            event_msg_.on_recv_msg(*this, ep, conn, type, buffer, s);
         }
     }
     
@@ -1040,7 +1045,7 @@ namespace atbus {
         event_msg_.on_node_down = fn;
     }
     
-    evt_msg_t::on_node_down_fn_t node::get_on_shutdown_handle() const {
+    node::evt_msg_t::on_node_down_fn_t node::get_on_shutdown_handle() const {
         return event_msg_.on_node_down;
     }
     
@@ -1048,7 +1053,7 @@ namespace atbus {
         event_msg_.on_custom_cmd = fn;
     }
     
-    evt_msg_t::on_custom_cmd_fn_t node::get_on_custom_cmd_handle() const {
+    node::evt_msg_t::on_custom_cmd_fn_t node::get_on_custom_cmd_handle() const {
         return event_msg_.on_custom_cmd;
     }
     
@@ -1056,8 +1061,24 @@ namespace atbus {
         event_msg_.on_send_data_failed = fn;
     }
     
-    evt_msg_t::on_send_data_failed_fn_t node::get_on_send_data_failed_handle() const {
+    node::evt_msg_t::on_send_data_failed_fn_t node::get_on_send_data_failed_handle() const {
         return event_msg_.on_send_data_failed;
+    }
+
+    void node::set_on_add_endpoint_handle(evt_msg_t::on_add_endpoint_fn_t fn) {
+        event_msg_.on_endpoint_added = fn;
+    }
+
+    node::evt_msg_t::on_add_endpoint_fn_t node::get_on_add_endpoint_handle() const {
+        return event_msg_.on_endpoint_added;
+    }
+
+    void node::set_on_remove_endpoint_handle(evt_msg_t::on_remove_endpoint_fn_t fn) {
+        event_msg_.on_endpoint_removed = fn;
+    }
+
+    node::evt_msg_t::on_remove_endpoint_fn_t node::get_on_remove_endpoint_handle() const {
+        return event_msg_.on_endpoint_removed;
     }
     
     void node::ref_object(void* obj) {

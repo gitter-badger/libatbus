@@ -405,6 +405,9 @@ namespace atbus {
             ATBUS_FUNC_NODE_ERROR(*async_data->owner_node, async_data->conn->binding_, async_data->conn.get(), status, channel->error_code);
             async_data->conn->state_ = state_t::DISCONNECTED;
 
+            // 连接失败，重置连接
+            async_data->conn->reset();
+
         } else {
             async_data->conn->flags_.set(flag_t::REG_FD, true);
             if (NULL == async_data->conn->binding_) {

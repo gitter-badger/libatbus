@@ -161,7 +161,7 @@ namespace atbus {
 
         if (m.body.forward->to == n.get_id()) {
             ATBUS_FUNC_NODE_DEBUG(n, (NULL == conn?NULL: conn->get_binding()), conn, "node recv data length = %lld", static_cast<unsigned long long>(m.body.forward->content.size));
-            n.on_recv_data(conn, m.head.type, m.body.forward->content.ptr, m.body.forward->content.size);
+            n.on_recv_data(conn->get_binding(), conn, m.head.type, m.body.forward->content.ptr, m.body.forward->content.size);
 
             if (m.body.forward->check_flag(atbus::protocol::forward_data::FLAG_REQUIRE_RSP)) {
                 return send_transfer_rsp(n, m, EN_ATBUS_ERR_SUCCESS);
@@ -311,6 +311,14 @@ namespace atbus {
                     ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "self has no global tree, children reg access deny");
                     break;
                 }
+
+                // 子节点域范围必须小于自身
+                if (n.get_self_endpoint()->get_children_mask() <= m.body.reg->children_id_mask) {
+                    rsp_code = EN_ATBUS_ERR_ATNODE_INVALID_MASK;
+
+                    ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "child mask must be greater than child node");
+                    break;
+                }
             }
 
             endpoint::ptr_t new_ep = endpoint::create(&n, m.body.reg->bus_id, m.body.reg->children_id_mask, m.body.reg->pid, m.body.reg->hostname);
@@ -333,6 +341,7 @@ namespace atbus {
             ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node add a new endpoint, res: %d", res);
             // 新的endpoint要建立所有连接
             ep->add_connection(conn, false);
+            bool has_data_conn = false;
             for (size_t i = 0; i < m.body.reg->channels.size(); ++i) {
                 const protocol::channel_data& chan = m.body.reg->channels[i];
                 res = n.connect(chan.address.c_str(), ep);
@@ -340,11 +349,14 @@ namespace atbus {
                     ATBUS_FUNC_NODE_ERROR(n, ep, conn, res, 0);
                 } else {
                     ep->add_listen(chan.address);
+                    has_data_conn = true;
                 }
             }
 
-            // 加入检测列表
-            n.add_check_list(new_ep);
+            // 如果没有成功进行的数据连接，加入检测列表，下一帧释放
+            if (!has_data_conn) {
+                n.add_check_list(new_ep);
+            }
         } while (false);
 
         // 仅fd连接发回注册回包，否则忽略（内存和共享内存通道为单工通道）
@@ -364,7 +376,7 @@ namespace atbus {
         n.on_reg(ep, conn, m.head.ret);
 
         if (m.head.ret < 0) {
-            if (NULL == ep) {
+            if (NULL != ep) {
                 n.add_check_list(ep->watch());
             }
 
@@ -433,7 +445,7 @@ namespace atbus {
                 ep->set_stat_ping(0);
 
                 time_t time_point = (n.get_timer_sec() / 1000) * 1000 + (n.get_timer_usec() / 1000) % 1000;
-                ep->set_stat_ping_delay(time_point - m.body.ping->time_point);
+                ep->set_stat_ping_delay(time_point - m.body.ping->time_point, n.get_timer_sec());
             }
         }
 

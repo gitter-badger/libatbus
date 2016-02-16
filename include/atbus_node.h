@@ -91,7 +91,7 @@ namespace atbus {
         typedef std::map<bus_id_t, endpoint::ptr_t> endpoint_collection_t;
 
         struct evt_msg_t {
-            typedef std::function<int(const node&, const endpoint&, const connection&, int, const void*, size_t)> on_recv_msg_fn_t;
+            typedef std::function<int(const node&, const endpoint*, const connection*, int, const void*, size_t)> on_recv_msg_fn_t;
             typedef std::function<int(const node&, const endpoint*, const connection*, const protocol::msg* m)> on_send_data_failed_fn_t;
             typedef std::function<int(const node&, const endpoint*, const connection*, int, int)> on_error_fn_t;
             typedef std::function<int(const node&, const endpoint*, const connection*, int)> on_reg_fn_t;
@@ -324,7 +324,7 @@ namespace atbus {
 
         void on_recv(connection* conn, protocol::msg* m, int status, int errcode);
 
-        void on_recv_data(connection* conn, int type, const void* buffer, size_t s) const;
+        void on_recv_data(const endpoint* ep, connection* conn, int type, const void* buffer, size_t s) const;
 
         void on_send_data_failed(const endpoint*, const connection*, const protocol::msg* m);
         
@@ -362,6 +362,12 @@ namespace atbus {
         
         void set_on_send_data_failed_handle(evt_msg_t::on_send_data_failed_fn_t fn);
         evt_msg_t::on_send_data_failed_fn_t get_on_send_data_failed_handle() const;
+
+        void set_on_add_endpoint_handle(evt_msg_t::on_add_endpoint_fn_t fn);
+        evt_msg_t::on_add_endpoint_fn_t get_on_add_endpoint_handle() const;
+
+        void set_on_remove_endpoint_handle(evt_msg_t::on_remove_endpoint_fn_t fn);
+        evt_msg_t::on_remove_endpoint_fn_t get_on_remove_endpoint_handle() const;
         
         void ref_object(void*);
         void unref_object(void*);
@@ -369,9 +375,9 @@ namespace atbus {
     private:
         static endpoint* find_child(endpoint_collection_t& coll, bus_id_t id);
 
-        static bool insert_child(endpoint_collection_t& coll, endpoint::ptr_t ep);
+        bool insert_child(endpoint_collection_t& coll, endpoint::ptr_t ep);
 
-        static bool remove_child(endpoint_collection_t& coll, bus_id_t id);
+        bool remove_child(endpoint_collection_t& coll, bus_id_t id);
 
         /**
          * @brief 增加错误计数，如果超出容忍值则移除

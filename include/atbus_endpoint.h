@@ -136,9 +136,11 @@ namespace atbus {
 
         uint32_t get_stat_ping() const;
 
-        void set_stat_ping_delay(time_t pd);
+        void set_stat_ping_delay(time_t pd, time_t pong_tm);
 
         time_t get_stat_ping_delay() const;
+
+        time_t get_stat_last_pong() const;
 
         inline const node* get_owner() const { return owner_; }
     private:
@@ -161,6 +163,7 @@ namespace atbus {
             size_t fault_count;             // 错误容忍计数
             uint32_t unfinished_ping;       // 上一次未完成的ping的序号
             time_t ping_delay;
+            time_t last_pong_time;          // 上一次接到PONG包时间
             stat_t();
         } ;
         stat_t stat_;

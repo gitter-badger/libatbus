@@ -55,17 +55,20 @@ struct node_reg_test_recv_msg_record_t {
     std::string data;
     int status;
     int count;
+    int add_endpoint_count;
+    int remove_endpoint_count;
 
-    node_reg_test_recv_msg_record_t(): n(NULL), ep(NULL), conn(NULL), status(0), count(0) {}
+    node_reg_test_recv_msg_record_t(): n(NULL), ep(NULL), conn(NULL), status(0), count(0),
+        add_endpoint_count(0), remove_endpoint_count(0) {}
 };
 
 static node_reg_test_recv_msg_record_t recv_msg_history;
 
-static int node_reg_test_recv_msg_test_record_fn(const atbus::node& n, const atbus::endpoint& ep, const atbus::connection& conn, 
+static int node_reg_test_recv_msg_test_record_fn(const atbus::node& n, const atbus::endpoint* ep, const atbus::connection* conn, 
     int status, const void* buffer, size_t len) {
     recv_msg_history.n = &n;
-    recv_msg_history.ep = &ep;
-    recv_msg_history.conn = &conn;
+    recv_msg_history.ep = ep;
+    recv_msg_history.conn = conn;
     recv_msg_history.status = status;
     ++recv_msg_history.count;
 
@@ -75,6 +78,22 @@ static int node_reg_test_recv_msg_test_record_fn(const atbus::node& n, const atb
         recv_msg_history.data.clear();
     }
 
+    return 0;
+}
+
+static int node_reg_test_add_endpoint_fn(const atbus::node& n, atbus::endpoint* ep, int) {
+    ++recv_msg_history.add_endpoint_count;
+
+    CASE_EXPECT_NE(NULL, ep);
+    CASE_EXPECT_NE(n.get_self_endpoint(), ep);
+    return 0;
+}
+
+static int node_reg_test_remove_endpoint_fn(const atbus::node& n, atbus::endpoint* ep, int) {
+    ++recv_msg_history.remove_endpoint_count;
+
+    CASE_EXPECT_NE(NULL, ep);
+    CASE_EXPECT_NE(n.get_self_endpoint(), ep);
     return 0;
 }
 
@@ -108,19 +127,27 @@ CASE_TEST(atbus_node_reg, reset_and_send)
         time_t proc_t = time(NULL);
         node1->proc(proc_t + 1, 0);
         node2->proc(proc_t + 1, 0);
+
+        // 连接兄弟节点回调测试
+        int check_ep_count = recv_msg_history.add_endpoint_count;
+        node1->set_on_add_endpoint_handle(node_reg_test_add_endpoint_fn);
+        node1->set_on_remove_endpoint_handle(node_reg_test_remove_endpoint_fn);
+        node2->set_on_add_endpoint_handle(node_reg_test_add_endpoint_fn);
+        node2->set_on_remove_endpoint_handle(node_reg_test_remove_endpoint_fn);
+
         node1->connect("ipv4://127.0.0.1:16388");
 
-        for (int i = 0; i < 256; ++i) {
-            uv_run(conf.ev_loop, UV_RUN_ONCE);
-            CASE_THREAD_SLEEP_MS(16);
-
+        for (int i = 0; i < 512; ++i) {
             atbus::endpoint* ep1 = node2->get_endpoint(node1->get_id());
             atbus::endpoint* ep2 = node1->get_endpoint(node2->get_id());
 
             if (NULL != ep1 && NULL != ep2 && NULL != ep1->get_data_connection(ep2) && NULL != ep2->get_data_connection(ep1)) {
                 break;
             }
+
+            uv_run(conf.ev_loop, UV_RUN_ONCE);
         }
+        CASE_EXPECT_EQ(check_ep_count + 2, recv_msg_history.add_endpoint_count);
 
         // 兄弟节点消息转发测试
         std::string send_data;
@@ -143,6 +170,8 @@ CASE_TEST(atbus_node_reg, reset_and_send)
 
         CASE_EXPECT_EQ(send_data, recv_msg_history.data);
 
+        check_ep_count = recv_msg_history.remove_endpoint_count;
+
         // reset
         node1->reset();
 
@@ -159,6 +188,8 @@ CASE_TEST(atbus_node_reg, reset_and_send)
                 break;
             }
         }
+
+        CASE_EXPECT_EQ(check_ep_count + 2, recv_msg_history.remove_endpoint_count);
 
         CASE_EXPECT_EQ(NULL, node2->get_endpoint(node1->get_id()));
         CASE_EXPECT_EQ(NULL, node1->get_endpoint(node2->get_id()));
@@ -201,16 +232,15 @@ CASE_TEST(atbus_node_reg, destruct)
         node2->proc(proc_t + 1, 0);
         node1->connect("ipv4://127.0.0.1:16388");
 
-        for (int i = 0; i < 256; ++i) {
-            uv_run(conf.ev_loop, UV_RUN_ONCE);
-            CASE_THREAD_SLEEP_MS(16);
-
+        for (int i = 0; i < 512; ++i) {
             atbus::endpoint* ep1 = node2->get_endpoint(node1->get_id());
             atbus::endpoint* ep2 = node1->get_endpoint(node2->get_id());
 
             if (NULL != ep1 && NULL != ep2 && NULL != ep1->get_data_connection(ep2) && NULL != ep2->get_data_connection(ep1)) {
                 break;
             }
+
+            uv_run(conf.ev_loop, UV_RUN_ONCE);
         }
 
         for (int i = 0; i < 16; ++i) {
@@ -252,6 +282,7 @@ CASE_TEST(atbus_node_reg, reg_success)
 
     conf.ev_loop = &ev_loop;
 
+    int check_ep_rm = recv_msg_history.remove_endpoint_count;
     {
         atbus::node::ptr_t node_parent = atbus::node::create();
         atbus::node::ptr_t node_child = atbus::node::create();
@@ -260,7 +291,7 @@ CASE_TEST(atbus_node_reg, reg_success)
 
         node_parent->init(0x12345678, &conf);
         
-        conf.children_mask = 24;
+        conf.children_mask = 8;
         conf.father_address = "ipv4://127.0.0.1:16387";
         node_child->init(0x12346789, &conf);
 
@@ -270,31 +301,40 @@ CASE_TEST(atbus_node_reg, reg_success)
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->start());
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child->start());
 
+        // 父子节点注册回调测试
+        int check_ep_count = recv_msg_history.add_endpoint_count;
+        node_parent->set_on_add_endpoint_handle(node_reg_test_add_endpoint_fn);
+        node_parent->set_on_remove_endpoint_handle(node_reg_test_remove_endpoint_fn);
+        node_child->set_on_add_endpoint_handle(node_reg_test_add_endpoint_fn);
+        node_child->set_on_remove_endpoint_handle(node_reg_test_remove_endpoint_fn);
+
         time_t proc_t = time(NULL);
         node_parent->proc(proc_t + 1, 0);
         node_child->proc(proc_t + 1, 0);
 
         // 注册成功自动会有可用的端点
-        for (int i = 0; i < 256; ++i) {
-            uv_run(conf.ev_loop, UV_RUN_ONCE);
-            CASE_THREAD_SLEEP_MS(16);
-
+        for (int i = 0; i < 512; ++i) {
             atbus::endpoint* ep1 = node_child->get_endpoint(node_parent->get_id());
             atbus::endpoint* ep2 = node_parent->get_endpoint(node_child->get_id());
 
             if (NULL != ep1 && NULL != ep2 && NULL != ep1->get_data_connection(ep2) && NULL != ep2->get_data_connection(ep1)) {
                 break;
             }
+
+            uv_run(conf.ev_loop, UV_RUN_ONCE);
         }
+        CASE_EXPECT_EQ(check_ep_count + 2, recv_msg_history.add_endpoint_count);
     }
 
     while (UV_EBUSY == uv_loop_close(&ev_loop)) {
         uv_run(&ev_loop, UV_RUN_ONCE);
     }
+
+    CASE_EXPECT_EQ(check_ep_rm + 2, recv_msg_history.remove_endpoint_count);
 }
 
 static int g_node_test_on_shutdown_check_reason = 0;
-static int node_test_on_shutdown(const node& n, int reason) {
+static int node_test_on_shutdown(const atbus::node& n, int reason) {
     if (0 == g_node_test_on_shutdown_check_reason) {
         ++ g_node_test_on_shutdown_check_reason;
     } else {
@@ -328,7 +368,7 @@ CASE_TEST(atbus_node_reg, conflict)
 
         node_parent->init(0x12345678, &conf);
         
-        conf.children_mask = 24;
+        conf.children_mask = 8;
         conf.father_address = "ipv4://127.0.0.1:16387";
         node_child->init(0x12346789, &conf);
         node_child_fail->init(0x12346789, &conf);
@@ -352,7 +392,8 @@ CASE_TEST(atbus_node_reg, conflict)
             node_child->proc(proc_t, 0);
             node_child_fail->proc(proc_t, 0);
             
-            uv_run(&ev_loop, UV_RUN_ONCE);
+            CASE_THREAD_SLEEP_MS(8);
+            uv_run(&ev_loop, UV_RUN_NOWAIT);
             proc_t += conf.retry_interval;
         }
         
@@ -385,7 +426,7 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
 
         node_parent->init(0x12345678, &conf);
         
-        conf.children_mask = 24;
+        conf.children_mask = 8;
         conf.father_address = "ipv4://127.0.0.1:16387";
         node_child->init(0x12346789, &conf);
 
@@ -404,7 +445,8 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
             node_parent->proc(proc_t, 0);
             node_child->proc(proc_t, 0);
             
-            uv_run(&ev_loop, UV_RUN_ONCE);
+            CASE_THREAD_SLEEP_MS(8);
+            uv_run(&ev_loop, UV_RUN_NOWAIT);
             ++ proc_t;
         }
         
@@ -426,7 +468,7 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
                 CASE_EXPECT_NE(atbus::node::state_t::INITED, node_child->get_state());
             }
             
-            uv_run(&ev_loop, UV_RUN_ONCE);
+            CASE_THREAD_SLEEP_MS(8);
             uv_run(&ev_loop, UV_RUN_NOWAIT);
             uv_run(&ev_loop, UV_RUN_NOWAIT);
             uv_run(&ev_loop, UV_RUN_NOWAIT);
@@ -445,7 +487,8 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
             node_parent->proc(proc_t, 0);
             node_child->proc(proc_t, 0);
             
-            uv_run(&ev_loop, UV_RUN_ONCE);
+            CASE_THREAD_SLEEP_MS(8);
+            uv_run(&ev_loop, UV_RUN_NOWAIT);
         }
         
         {

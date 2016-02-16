@@ -181,7 +181,7 @@ namespace atbus {
                 
                 // 数据节点全部离线也直接下线
                 // 内存和共享内存通道不会被动下线
-                // 如果任意tcp通道被动下线或者存在内存或共享内存通道则无需下载
+                // 如果任意tcp通道被动下线或者存在内存或共享内存通道则无需下线
                 // 因为通常来说内存或共享内存通道就是最快的通道
                 if (data_conn_.empty()) {
                     reset();
@@ -291,7 +291,7 @@ namespace atbus {
         return get_ctrl_connection(ep);
     }
 
-    endpoint::stat_t::stat_t(): fault_count(0), unfinished_ping(0), ping_delay(0){}
+    endpoint::stat_t::stat_t(): fault_count(0), unfinished_ping(0), ping_delay(0), last_pong_time(0){}
 
     /** 增加错误计数 **/
     size_t endpoint::add_stat_fault() {
@@ -311,11 +311,16 @@ namespace atbus {
         return stat_.unfinished_ping;
     }
 
-    void endpoint::set_stat_ping_delay(time_t pd) {
+    void endpoint::set_stat_ping_delay(time_t pd, time_t pong_tm) {
         stat_.ping_delay = pd;
+        stat_.last_pong_time = pong_tm;
     }
 
     time_t endpoint::get_stat_ping_delay() const {
         return stat_.ping_delay;
+    }
+
+    time_t endpoint::get_stat_last_pong() const {
+        return stat_.last_pong_time;
     }
 }
