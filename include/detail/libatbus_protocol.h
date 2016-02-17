@@ -363,10 +363,10 @@ namespace msgpack {
                     }
 
                     case ATBUS_CMD_NODE_CONN_SYN: {
-                        if (NULL == v.body.sync) {
+                        if (NULL == v.body.conn) {
                             o.pack_nil();
                         } else {
-                            o.pack(*v.body.sync);
+                            o.pack(*v.body.conn);
                         }
                         break;
                     }
@@ -444,10 +444,10 @@ namespace msgpack {
                     }
 
                     case ATBUS_CMD_NODE_CONN_SYN: {
-                        if (NULL == v.body.sync) {
+                        if (NULL == v.body.conn) {
                             o.via.map.ptr[1].val = msgpack::object();
                         } else {
-                            v.body.sync->msgpack_object(&o.via.map.ptr[1].val, o.zone);
+                            v.body.conn->msgpack_object(&o.via.map.ptr[1].val, o.zone);
                         }
                         break;
                     }

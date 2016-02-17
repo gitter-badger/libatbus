@@ -176,12 +176,14 @@ namespace atbus {
         int res = 0;
         endpoint* to_ep = NULL;
         // 转发数据
+        node::bus_id_t direct_from_bus_id = m.head.src_bus_id;
+
         res = n.send_data_msg(m.body.forward->to, m, &to_ep, NULL);
 
         // 子节点转发成功
         if (res >= 0 && n.is_child_node(m.body.forward->to)) {
             // 如果来源和目标消息都来自于子节点，则通知建立直连
-            if (NULL != to_ep && n.is_child_node(m.head.src_bus_id) && n.is_child_node(to_ep->get_id())) {
+            if (NULL != to_ep && n.is_child_node(direct_from_bus_id) && n.is_child_node(to_ep->get_id())) {
                 protocol::msg conn_syn_m;
                 conn_syn_m.init(n.get_id(), ATBUS_CMD_NODE_CONN_SYN, 0, 0, n.alloc_msg_seq());
                 protocol::conn_data* new_conn = conn_syn_m.body.make_body(conn_syn_m.body.conn);
@@ -201,7 +203,7 @@ namespace atbus {
                 }
 
                 if (!new_conn->address.address.empty()) {
-                    return n.send_ctrl_msg(m.head.src_bus_id, conn_syn_m);
+                    return n.send_ctrl_msg(direct_from_bus_id, conn_syn_m);
                 }
             }
 
@@ -269,6 +271,7 @@ namespace atbus {
         endpoint* ep = NULL;
         int32_t res = EN_ATBUS_ERR_SUCCESS;
         int32_t rsp_code = EN_ATBUS_ERR_SUCCESS;
+
         do {
             if (NULL == m.body.reg || NULL == conn) {
                 rsp_code = EN_ATBUS_ERR_BAD_DATA;
@@ -292,8 +295,12 @@ namespace atbus {
             // 老端点新增连接不需要创建新连接
             ep = n.get_endpoint(m.body.reg->bus_id);
             if (NULL != ep) {
-                // 有共享物理机限制的连接只能加为数据节点（一般就是内存通道或者共享内存通道）
-                if (false == ep->add_connection(conn, conn->check_flag(connection::flag_t::ACCESS_SHARE_HOST))) {
+                // 检测机器名和进程号必须一致
+                if (ep->get_pid() != m.body.reg->pid || ep->get_hostname() != m.body.reg->hostname) {
+                    res = EN_ATBUS_ERR_ATNODE_ID_CONFLICT;
+                    ATBUS_FUNC_NODE_ERROR(n, ep, conn, res, 0);
+                } else if (false == ep->add_connection(conn, conn->check_flag(connection::flag_t::ACCESS_SHARE_HOST))) {
+                    // 有共享物理机限制的连接只能加为数据节点（一般就是内存通道或者共享内存通道）
                     res = EN_ATBUS_ERR_ATNODE_NO_CONNECTION;
                     ATBUS_FUNC_NODE_ERROR(n, ep, conn, res, 0);
                 }
@@ -314,7 +321,7 @@ namespace atbus {
 
                 // 子节点域范围必须小于自身
                 if (n.get_self_endpoint()->get_children_mask() <= m.body.reg->children_id_mask) {
-                    rsp_code = EN_ATBUS_ERR_ATNODE_INVALID_MASK;
+                    rsp_code = EN_ATBUS_ERR_ATNODE_MASK_CONFLICT;
 
                     ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "child mask must be greater than child node");
                     break;
@@ -332,7 +339,6 @@ namespace atbus {
             res = n.add_endpoint(new_ep);
             if (res < 0) {
                 ATBUS_FUNC_NODE_ERROR(n, ep, conn, res, 0);
-                conn->disconnect();
                 rsp_code = res;
                 break;
             }
@@ -360,8 +366,13 @@ namespace atbus {
         } while (false);
 
         // 仅fd连接发回注册回包，否则忽略（内存和共享内存通道为单工通道）
-        if (conn->check_flag(connection::flag_t::REG_FD)) {
-            return send_reg(ATBUS_CMD_NODE_REG_RSP, n, *conn, rsp_code, m.head.sequence);
+        if (NULL != conn && conn->check_flag(connection::flag_t::REG_FD)) {
+            int ret = send_reg(ATBUS_CMD_NODE_REG_RSP, n, *conn, rsp_code, m.head.sequence);
+            if (rsp_code < 0) {
+                conn->disconnect();
+            }
+
+            return ret;
         } else {
             return 0;
         }
@@ -393,6 +404,19 @@ namespace atbus {
             }
             
             return m.head.ret;
+        } else if(node::state_t::CONNECTING_PARENT == n.get_state()) {
+            // 父节点返回的rsp成功则可以上线
+            // 这时候父节点的endpoint不一定初始化完毕
+            if (n.is_parent_node(m.body.reg->bus_id)) {
+                n.on_parent_reg_done();
+                n.on_actived();
+            } else {
+                node::bus_id_t min_c = endpoint::get_children_min_id(m.body.reg->bus_id, m.body.reg->children_id_mask);
+                node::bus_id_t max_c = endpoint::get_children_max_id(m.body.reg->bus_id, m.body.reg->children_id_mask);
+                if (n.get_id() != m.body.reg->bus_id && n.get_id() >= min_c && n.get_id() <= max_c) {
+                    n.on_parent_reg_done();
+                }
+            }
         }
 
         return EN_ATBUS_ERR_SUCCESS;

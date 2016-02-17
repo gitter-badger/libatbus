@@ -134,7 +134,7 @@ CASE_TEST(atbus_endpoint, get_connection)
     conf.recv_buffer_size = 64 * 1024;
 
     char* buffer = new char[conf.recv_buffer_size];
-    memset(buffer, -1, sizeof(conf.recv_buffer_size)); // init it and then valgrind will noe report uninitialised used
+    memset(buffer, -1, sizeof(conf.recv_buffer_size)); // init it and then valgrind will now report uninitialised used
 
     char addr[32] = { 0 };
     UTIL_STRFUNC_SNPRINTF(addr, sizeof(addr), "mem://0x%p", buffer);
@@ -168,75 +168,4 @@ CASE_TEST(atbus_endpoint, get_connection)
         //    uv_run(&ev_loop, UV_RUN_ONCE);
         //}
     }
-
-    // 同进程/物理机连接
-//    {
-//        atbus::node::ptr_t node_listened = atbus::node::create();
-//        node_listened->init(0x12356789, &conf);
-//        node_listened->listen("ipv4://127.0.0.1:16387");
-//
-//        atbus::node::ptr_t node = atbus::node::create();
-//        node->init(0x12345678, &conf);
-//
-//        atbus::connection::ptr_t conn1 = atbus::connection::create(node.get());
-//
-//        CASE_EXPECT_EQ(0, conn1->connect(addr));
-//
-//        atbus::connection::ptr_t conn2 = atbus::connection::create(node.get());
-//        conn2->connect("ipv4://127.0.0.1:16387");
-//
-//        while(atbus::connection::state_t::CONNECTED != conn2->get_status() &&
-//            atbus::connection::state_t::DISCONNECTED != conn2->get_status()) {
-//            uv_run(conf.ev_loop, UV_RUN_ONCE);
-//        }
-//
-//        CASE_EXPECT_EQ(atbus::connection::state_t::CONNECTED, conn2->get_status());
-//
-//        atbus::endpoint::ptr_t ep = atbus::endpoint::create(node.get(), 0x12356789, 8, node->get_pid(), node->get_hostname());
-//        CASE_EXPECT_TRUE(ep->add_connection(conn2.get(), true));
-//        CASE_EXPECT_TRUE(ep->add_connection(conn1.get(), true));
-//
-//        CASE_EXPECT_EQ(0, node->add_endpoint(ep));
-//
-//        atbus::connection* conn3 = node->get_self_endpoint()->get_data_connection(ep.get());
-//        CASE_EXPECT_EQ(conn3, conn1.get());
-//    }
-
-    // 不同进程/物理机连接
-//    {
-//        atbus::node::ptr_t node_listened = atbus::node::create();
-//        node_listened->init(0x12356789, &conf);
-//        node_listened->listen("ipv4://127.0.0.1:16387");
-//
-//        atbus::node::ptr_t node = atbus::node::create();
-//        node->init(0x12345678, &conf);
-//
-//        atbus::connection::ptr_t conn1 = atbus::connection::create(node.get());
-//
-//        CASE_EXPECT_EQ(0, conn1->connect(addr));
-//
-//        atbus::connection::ptr_t conn2 = atbus::connection::create(node.get());
-//        conn2->connect("ipv4://127.0.0.1:16387");
-//
-//        while (atbus::connection::state_t::CONNECTED != conn2->get_status() &&
-//            atbus::connection::state_t::DISCONNECTED != conn2->get_status()) {
-//            uv_run(conf.ev_loop, UV_RUN_ONCE);
-//        }
-//
-//        CASE_EXPECT_EQ(atbus::connection::state_t::CONNECTED, conn2->get_status());
-//
-//        atbus::endpoint::ptr_t ep = atbus::endpoint::create(node.get(), 0x12356789, 8, node->get_pid(), node->get_hostname() + ":diff");
-//        CASE_EXPECT_TRUE(ep->add_connection(conn1.get(), true));
-//        CASE_EXPECT_TRUE(ep->add_connection(conn2.get(), true));
-//
-//        CASE_EXPECT_EQ(0, node->add_endpoint(ep));
-//
-//        atbus::connection* conn3 = node->get_self_endpoint()->get_data_connection(ep.get());
-//        CASE_EXPECT_EQ(conn3, conn2.get());
-//    }
-
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
-    delete[]buffer;
 }

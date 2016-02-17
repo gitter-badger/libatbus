@@ -391,7 +391,7 @@ CASE_TEST(atbus_node_reg, parent_and_child)
     }
 }
 
-// TODO 兄弟节点通过父节点转发消息并建立直连测试（测试路由）
+// 兄弟节点通过父节点转发消息并建立直连测试（测试路由）
 CASE_TEST(atbus_node_reg, transfer_and_connect)
 {
     atbus::node::conf_t conf;
@@ -416,7 +416,7 @@ CASE_TEST(atbus_node_reg, transfer_and_connect)
         conf.children_mask = 8;
         conf.father_address = "ipv4://127.0.0.1:16387";
         node_child_1->init(0x12346789, &conf);
-        node_child_2->init(0x12346780, &conf);
+        node_child_2->init(0x12346890, &conf);
         
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_parent->listen("ipv4://127.0.0.1:16387"));
         CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child_1->listen("ipv4://127.0.0.1:16388"));
@@ -465,6 +465,10 @@ CASE_TEST(atbus_node_reg, transfer_and_connect)
         CASE_EXPECT_EQ(send_data, recv_msg_history.data);
         
         // 自动直连测试
+        for (int i = 0; i < 512 && NULL == node_child_1->get_endpoint(node_child_2->get_id()); ++i) {
+            uv_run(conf.ev_loop, UV_RUN_NOWAIT);
+            CASE_THREAD_SLEEP_MS(8);
+        }
         atbus::endpoint* ep1 = node_child_1->get_endpoint(node_child_2->get_id());
         CASE_EXPECT_NE(NULL, ep1);
     }
@@ -474,7 +478,7 @@ CASE_TEST(atbus_node_reg, transfer_and_connect)
     }
 }
 
-// TODO 兄弟节点通过多层父节点转发消息并不会建立直连测试
+// 兄弟节点通过多层父节点转发消息并不会建立直连测试
 CASE_TEST(atbus_node_reg, transfer_only)
 {
     atbus::node::conf_t conf;
@@ -551,7 +555,7 @@ CASE_TEST(atbus_node_reg, transfer_only)
         int count = recv_msg_history.count;
         node_child_1->send_data(node_child_2->get_id(), 0, send_data.data(), send_data.size());
         for (int i = 0; i < 512; ++i) {
-            uv_run(conf.ev_loop, UV_RUN_ONCE);
+            uv_run(conf.ev_loop, UV_RUN_NOWAIT);
             CASE_THREAD_SLEEP_MS(8);
             if (count != recv_msg_history.count) {
                 break;
@@ -559,8 +563,12 @@ CASE_TEST(atbus_node_reg, transfer_only)
         }
 
         CASE_EXPECT_EQ(send_data, recv_msg_history.data);
+        for (int i = 0; i < 128; ++i) {
+            uv_run(conf.ev_loop, UV_RUN_NOWAIT);
+            CASE_THREAD_SLEEP_MS(4);
+        }
         
-        // 自动直连测试
+        // 非直接子节点互相不建立直连
         atbus::endpoint* ep1 = node_child_1->get_endpoint(node_child_2->get_id());
         CASE_EXPECT_EQ(NULL, ep1);
     }
@@ -570,7 +578,7 @@ CASE_TEST(atbus_node_reg, transfer_only)
     }
 }
 
-// TODO 直连节点发送失败测试
+// 直连节点发送失败测试
 CASE_TEST(atbus_node_reg, send_failed)
 {
     atbus::node::conf_t conf;
@@ -605,8 +613,8 @@ CASE_TEST(atbus_node_reg, send_failed)
     }
 }
 
-// TODO 发送给子节点转发失败的回复通知测试
-// TODO 发送给父节点转发失败的回复通知测试
+// 发送给子节点转发失败的回复通知测试
+// 发送给父节点转发失败的回复通知测试
 CASE_TEST(atbus_node_reg, transfer_failed)
 {
     atbus::node::conf_t conf;
@@ -662,15 +670,17 @@ CASE_TEST(atbus_node_reg, transfer_failed)
         send_data.assign("transfer through parent\n", sizeof("transfer through parent\n") - 1);
         
         int count = recv_msg_history.count;
-        node_child_1->send_data(0x12346780, 0, send_data.data(), send_data.size());
-        for (int i = 0; i < 256; ++i) {
-            uv_run(conf.ev_loop, UV_RUN_ONCE);
-            CASE_THREAD_SLEEP_MS(16);
-            if (count != recv_msg_history.count) {
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child_1->send_data(0x12346890, 0, send_data.data(), send_data.size()));
+        CASE_EXPECT_EQ(EN_ATBUS_ERR_SUCCESS, node_child_1->send_data(0x12356789, 0, send_data.data(), send_data.size()));
+        for (int i = 0; i < 512; ++i) {
+            uv_run(conf.ev_loop, UV_RUN_NOWAIT);
+            CASE_THREAD_SLEEP_MS(8);
+            if (count + 1 < recv_msg_history.count) {
                 break;
             }
         }
 
+        CASE_EXPECT_EQ(count + 2, recv_msg_history.count);
         CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_INVALID_ID, recv_msg_history.status);
     }
 

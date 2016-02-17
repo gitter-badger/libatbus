@@ -168,6 +168,7 @@ CASE_TEST(atbus_node_reg, reset_and_send)
             }
         }
 
+        // check add endpoint callback
         CASE_EXPECT_EQ(send_data, recv_msg_history.data);
 
         check_ep_count = recv_msg_history.remove_endpoint_count;
@@ -189,6 +190,7 @@ CASE_TEST(atbus_node_reg, reset_and_send)
             }
         }
 
+        // check remove endpoint callback
         CASE_EXPECT_EQ(check_ep_count + 2, recv_msg_history.remove_endpoint_count);
 
         CASE_EXPECT_EQ(NULL, node2->get_endpoint(node1->get_id()));
@@ -271,7 +273,7 @@ CASE_TEST(atbus_node_reg, destruct)
     }
 }
 
-// TODO 注册成功流程测试
+// 注册成功流程测试
 CASE_TEST(atbus_node_reg, reg_success)
 {
     atbus::node::conf_t conf;
@@ -345,8 +347,8 @@ static int node_test_on_shutdown(const atbus::node& n, int reason) {
     return 0;
 }
 
-// TODO 注册到父节点失败导致下线的流程测试
-// TODO 注册到子节点失败不会导致下线的流程测试
+// 注册到父节点失败导致下线的流程测试
+// 注册到子节点失败不会导致下线的流程测试
 CASE_TEST(atbus_node_reg, conflict)
 {
     atbus::node::conf_t conf;
@@ -371,7 +373,8 @@ CASE_TEST(atbus_node_reg, conflict)
         conf.children_mask = 8;
         conf.father_address = "ipv4://127.0.0.1:16387";
         node_child->init(0x12346789, &conf);
-        node_child_fail->init(0x12346789, &conf);
+        // 子域冲突，注册失败
+        node_child_fail->init(0x12346780, &conf);
 
         node_child->set_on_shutdown_handle(node_test_on_shutdown);
         node_child_fail->set_on_shutdown_handle(node_test_on_shutdown);
@@ -396,8 +399,14 @@ CASE_TEST(atbus_node_reg, conflict)
             uv_run(&ev_loop, UV_RUN_NOWAIT);
             proc_t += conf.retry_interval;
         }
+
+        for (int i = 0; i < 64; ++i) {
+            CASE_THREAD_SLEEP_MS(8);
+            uv_run(&ev_loop, UV_RUN_NOWAIT);
+        }
         
         // 注册到子节点失败不会导致下线的流程测试
+        CASE_EXPECT_TRUE(atbus::node::state_t::RUNNING == node_child->get_state() || atbus::node::state_t::RUNNING == node_child_fail->get_state());
         CASE_EXPECT_EQ(atbus::node::state_t::RUNNING, node_parent->get_state());
     }
 
@@ -406,7 +415,8 @@ CASE_TEST(atbus_node_reg, conflict)
     }
 }
 
-// TODO 对父节点重连失败不会导致下线的流程测试
+// 对父节点重连失败不会导致下线的流程测试
+// 对父节点断线重连的流程测试
 CASE_TEST(atbus_node_reg, reconnect_father_failed)
 {
     atbus::node::conf_t conf;
@@ -456,8 +466,8 @@ CASE_TEST(atbus_node_reg, reconnect_father_failed)
         // 重连父节点，但是连接不成功也不会导致下线
         // 连接过程中的转态变化
         size_t retry_times = 0;
-        while (atbus::node::state_t::RUNNING == node_child->get_state() || retry_times < 5) {
-            proc_t += conf.retry_interval;
+        while (atbus::node::state_t::RUNNING == node_child->get_state() || retry_times < 16) {
+            proc_t += conf.retry_interval + 1;
             // node_parent->proc(proc_t, 0);
             node_child->proc(proc_t, 0);
             

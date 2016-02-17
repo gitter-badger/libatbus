@@ -62,7 +62,9 @@ namespace atbus {
             enum type {
                 EN_FT_RESETTING,                /** 正在重置 **/
                 EN_FT_ACTIVED,                  /** 已激活 **/
-                EN_FT_MAX,                      /** 正在重置 **/
+                EN_FT_PARENT_REG_DONE,          /** 已通过父节点注册 **/
+                EN_FT_SHUTDOWN,                 /** 已完成关闭前的资源回收 **/
+                EN_FT_MAX,                      /** flag max **/
             };
         };
 
@@ -334,8 +336,17 @@ namespace atbus {
         int on_shutdown(int reason);
         int on_reg(const endpoint*, const connection*, int);
         int on_actived();
+        int on_parent_reg_done();
         int on_custom_cmd(const endpoint*, const connection*, bus_id_t from, const std::vector<std::pair<const void*, size_t> >& cmd_args);
 
+        /**
+         * @brief 关闭node
+         * @param reason 关闭原因ID
+         * @note 如果需要在关闭前执行资源回收，可以在on_node_down_fn_t回调中返回非0值来阻止node的reset操作，
+         *       并在资源释放完成后再调用shutdown函数，在第二次on_node_down_fn_t回调中返回0值
+         *
+         * @note 或者也可以通过ref_object和unref_object来标记和解除数据引用，reset函数会执行事件loop知道所有引用的资源被移除
+         */
         int shutdown(int reason);
 
         inline const detail::buffer_block* get_temp_static_buffer() const { return static_buffer_; }
@@ -378,6 +389,8 @@ namespace atbus {
         bool insert_child(endpoint_collection_t& coll, endpoint::ptr_t ep);
 
         bool remove_child(endpoint_collection_t& coll, bus_id_t id);
+
+        bool remove_collection(endpoint_collection_t& coll);
 
         /**
          * @brief 增加错误计数，如果超出容忍值则移除

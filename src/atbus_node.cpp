@@ -47,6 +47,8 @@ namespace atbus {
         event_timer_.usec = 0;
         event_timer_.node_sync_push = 0;
         event_timer_.father_opr_time_point = 0;
+
+        flags_.reset();
     }
 
     node::~node() {
@@ -153,11 +155,11 @@ namespace atbus {
 
         // 销毁endpoint
         if (node_father_.node_) {
-            node_father_.node_.reset();
+            remove_endpoint(node_father_.node_->get_id());
         }
         // endpoint 不应该游离在node以外，所以这里就应该要触发endpoint::reset
-        node_brother_.clear();
-        node_children_.clear();
+        remove_collection(node_brother_);
+        remove_collection(node_children_);
 
         // 清空检测列表和ping列表
         event_timer_.pending_check_list_.clear();
@@ -212,6 +214,10 @@ namespace atbus {
             event_timer_.usec = usec;
         }
         
+        if (flags_.test(flag_t::EN_FT_SHUTDOWN)) {
+            reset();
+            return 1;
+        }
 
         int ret = 0;
         // TODO 以后可以优化成event_fd通知，这样就不需要轮询了
@@ -254,7 +260,7 @@ namespace atbus {
         if (!conf_.father_address.empty() && 0 != event_timer_.father_opr_time_point && event_timer_.father_opr_time_point < sec) {
             // 获取命令节点
             connection* ctl_conn = NULL;
-            if (!node_father_.node_) {
+            if (node_father_.node_) {
                 ctl_conn = self_->get_ctrl_connection(node_father_.node_.get());
             }
 
@@ -319,7 +325,11 @@ namespace atbus {
                     }
                 }
             }
+
+            // 再清理一次，因为endpoint::reset可能触发进入pending_check_list_
+            event_timer_.pending_check_list_.clear();
         }
+
         return ret;
     }
 
@@ -539,6 +549,19 @@ namespace atbus {
 
                     ASSIGN_EPCONN(target);
                     break;
+                } else if (false == get_self_endpoint()->get_flag(endpoint::flag_t::GLOBAL_ROUTER) && node_father_.node_) {
+                    // 如果没有全量表则发给父节点
+                    /*                        
+                    //       F1 
+                    //      /  \   
+                    //    C11  C12 
+                    // 当C11发往C12时触发这种情况
+                    */
+                    endpoint* target = node_father_.node_.get();
+                    conn = (self_.get()->*fn)(target);
+
+                    ASSIGN_EPCONN(target);
+                    break;
                 }
                 return EN_ATBUS_ERR_ATNODE_INVALID_ID;
             }
@@ -555,11 +578,18 @@ namespace atbus {
                 return EN_ATBUS_ERR_ATNODE_INVALID_ID;
             }
 
-            // 其他情况发给父节点
-            if (node_father_.node_ && tid == node_father_.node_->get_id()) {
-                conn = (self_.get()->*fn)(node_father_.node_.get());
+            // 其他情况,如果没有全量表则发给父节点
+            /*                        
+            //       F1 ------------ F2
+            //      /  \            /  \
+            //    C11  C12        C21  C22
+            // 当C11发往C21或C22时触发这种情况
+            */
+            if (node_father_.node_ && false == get_self_endpoint()->get_flag(endpoint::flag_t::GLOBAL_ROUTER)) {
+                endpoint* target = node_father_.node_.get();
+                conn = (self_.get()->*fn)(target);
 
-                ASSIGN_EPCONN(node_father_.node_.get());
+                ASSIGN_EPCONN(target);
                 break;
             }
         } while (false);
@@ -619,11 +649,12 @@ namespace atbus {
             if (!node_father_.node_) {
                 node_father_.node_ = ep;
                 add_ping_timer(ep);
-
-                if (state_t::CONNECTING_PARENT == state_) {
+                
+                if ((state_t::LOST_PARENT == get_state() || state_t::CONNECTING_PARENT == get_state()) && 
+                    check(flag_t::EN_FT_PARENT_REG_DONE)) {
                     on_actived();
                 }
-                
+
                 // event
                 if (event_msg_.on_endpoint_added) {
                     event_msg_.on_endpoint_added(*this, ep.get(), EN_ATBUS_ERR_SUCCESS);
@@ -644,7 +675,7 @@ namespace atbus {
 
                 return EN_ATBUS_ERR_SUCCESS;
             } else {
-                return EN_ATBUS_ERR_ATNODE_INVALID_ID;
+                return EN_ATBUS_ERR_ATNODE_MASK_CONFLICT;
             }
         }
 
@@ -657,7 +688,7 @@ namespace atbus {
                 // TODO 子节点上线上报
                 return EN_ATBUS_ERR_SUCCESS;
             } else {
-                return EN_ATBUS_ERR_ATNODE_INVALID_ID;
+                return EN_ATBUS_ERR_ATNODE_MASK_CONFLICT;
             }
         }
 
@@ -671,10 +702,13 @@ namespace atbus {
             
             node_father_.node_.reset();
             state_ = state_t::LOST_PARENT;
+
+            // set reconnect to father into retry interval
+            event_timer_.father_opr_time_point = get_timer_sec() + conf_.retry_interval;
             
             // event
-            if (event_msg_.on_endpoint_added) {
-                event_msg_.on_endpoint_added(*this, ep.get(), EN_ATBUS_ERR_SUCCESS);
+            if (event_msg_.on_endpoint_removed) {
+                event_msg_.on_endpoint_removed(*this, ep.get(), EN_ATBUS_ERR_SUCCESS);
             }
             return EN_ATBUS_ERR_SUCCESS;
         }
@@ -899,8 +933,13 @@ namespace atbus {
             return EN_ATBUS_ERR_PARAMS;
         }
         
-        // TODO 断线逻辑
-        // conn->reset();
+        // 父节点断线逻辑则重置状态
+        if (state_t::CONNECTING_PARENT == state_ && !conf_.father_address.empty() && conf_.father_address == conn->get_address().address) {
+            state_ = state_t::LOST_PARENT;
+
+            // set reconnect to father into retry interval
+            event_timer_.father_opr_time_point = get_timer_sec() + conf_.retry_interval;
+        }
         return EN_ATBUS_ERR_SUCCESS;
     }
 
@@ -960,6 +999,11 @@ namespace atbus {
         return EN_ATBUS_ERR_SUCCESS;
     }
 
+    int node::on_parent_reg_done() {
+        flags_.set(flag_t::EN_FT_PARENT_REG_DONE, true);
+        return EN_ATBUS_ERR_SUCCESS;
+    }
+
     int node::on_custom_cmd(const endpoint* ep, const connection* conn, bus_id_t from, const std::vector<std::pair<const void*, size_t> >& cmd_args) {
         if (event_msg_.on_custom_cmd) {
             event_msg_.on_custom_cmd(*this, ep, conn, from, cmd_args);
@@ -969,8 +1013,9 @@ namespace atbus {
 
     int node::shutdown(int reason) {
         int ret = on_shutdown(reason);
-
-        reset();
+        if (0 == ret) {
+            flags_.set(flag_t::EN_FT_SHUTDOWN, true);
+        }
         return ret;
     }
 
@@ -1181,6 +1226,19 @@ namespace atbus {
             event_msg_.on_endpoint_removed(*this, ep.get(), EN_ATBUS_ERR_SUCCESS);
         }
         return true;
+    }
+
+    bool node::remove_collection(endpoint_collection_t& coll) {
+        endpoint_collection_t ec;
+        ec.swap(coll);
+
+        if (event_msg_.on_endpoint_removed) {
+            for (endpoint_collection_t::iterator iter = ec.begin(); iter != ec.end(); ++iter) {
+                event_msg_.on_endpoint_removed(*this, iter->second.get(), EN_ATBUS_ERR_SUCCESS);
+            }
+        }
+
+        return !ec.empty();
     }
 
     bool node::add_endpoint_fault(endpoint& ep) {
