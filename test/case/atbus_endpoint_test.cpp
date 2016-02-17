@@ -164,8 +164,11 @@ CASE_TEST(atbus_endpoint, get_connection)
         atbus::connection* conn3 = node->get_self_endpoint()->get_data_connection(ep.get());
         CASE_EXPECT_EQ(conn3, conn1.get());
 
-        //while (uv_run(&ev_loop, UV_RUN_NOWAIT)) {
-        //    uv_run(&ev_loop, UV_RUN_ONCE);
-        //}
     }
+
+    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
+        uv_run(&ev_loop, UV_RUN_ONCE);
+    }
+
+    delete []buffer;
 }
