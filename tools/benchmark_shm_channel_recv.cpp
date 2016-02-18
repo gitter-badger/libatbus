@@ -30,8 +30,6 @@ int main(int argc, char* argv[])
     if (argc > 3)
         buffer_len = (size_t)strtol(argv[3], NULL, 10);
 
-    char* buffer = new char[buffer_len];
-
     shm_channel* channel = NULL;
     key_t shm_key = (key_t)strtol(argv[1], NULL, 10);
 
@@ -49,8 +47,7 @@ int main(int argc, char* argv[])
     size_t sum_data_err = 0;
 
     // 创建读线程
-    std::thread* read_threads;
-    read_threads = new std::thread([&]{
+    std::thread* read_threads = new std::thread([&]{
         size_t* buf_pool = new size_t[max_n];
         std::map<size_t, int> val_check;
 
@@ -134,6 +131,5 @@ int main(int argc, char* argv[])
 
     read_threads->join();
     delete read_threads;
-    delete []buffer;
 }
 

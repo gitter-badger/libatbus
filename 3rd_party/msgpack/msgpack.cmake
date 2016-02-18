@@ -23,7 +23,7 @@ if(NOT MSGPACK_FOUND)
         file(MAKE_DIRECTORY ${3RD_PARTY_MSGPACK_PKG_DIR})
     endif()
     
-    set(3RD_PARTY_MSGPACK_VERSION "1.3.0")
+    set(3RD_PARTY_MSGPACK_VERSION "1.4.0")
     if(NOT EXISTS "${3RD_PARTY_MSGPACK_PKG_DIR}/msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz")
         FindConfigurePackageDownloadFile("https://github.com/msgpack/msgpack-c/releases/download/cpp-${3RD_PARTY_MSGPACK_VERSION}/msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz" "${3RD_PARTY_MSGPACK_PKG_DIR}/msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz")
     endif()
