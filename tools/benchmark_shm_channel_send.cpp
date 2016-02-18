@@ -39,8 +39,6 @@ int main(int argc, char* argv[])
     if (argc > 4)
         buffer_len = (size_t)strtol(argv[4], NULL, 10);
 
-    char* buffer = new char[buffer_len];
-
     shm_channel* channel = NULL;
     key_t shm_key = (key_t)strtol(argv[1], NULL, 10);
 
@@ -59,8 +57,7 @@ int main(int argc, char* argv[])
     size_t sum_seq = ((size_t)rand() << 32);
 
     // 创建写线程
-    std::thread* write_threads;
-    write_threads = new std::thread([&]{
+    std::thread* write_threads = new std::thread([&]{
         size_t* buf_pool = new size_t[max_n];
         size_t left_sleep_count = sleep_times;
 
@@ -130,6 +127,5 @@ int main(int argc, char* argv[])
 
     write_threads->join();
     delete write_threads;
-    delete []buffer;
 }
 

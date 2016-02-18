@@ -47,6 +47,8 @@ namespace atbus {
                 }
                 
                 conn = other.conn;
+
+                return *this;
             }
         };
     }
