@@ -366,7 +366,7 @@ static void recv_size_err_callback_check_fn(
     } else if (EN_ATBUS_ERR_READ_FAILED == status) {
         CASE_EXPECT_EQ(NULL, input);
         CASE_EXPECT_EQ(EN_ATBUS_ERR_READ_FAILED, status);
-        CASE_EXPECT_EQ(UV_ECONNRESET, channel->error_code);
+        CASE_EXPECT_TRUE(UV_EOF == channel->error_code || UV_ECONNRESET == channel->error_code);
     } else {
         CASE_EXPECT_TRUE(EN_ATBUS_ERR_INVALID_SIZE == status || EN_ATBUS_ERR_READ_FAILED == status);
     }

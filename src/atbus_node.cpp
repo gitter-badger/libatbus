@@ -1194,9 +1194,11 @@ namespace atbus {
         }
 
         // 如果有老节点是新节点的子节点，则失败退出
-        --iter;
-        if (iter != coll.end() && ep->is_child_node(iter->second->get_id())) {
-            return false;
+        if (iter != coll.begin()) {
+            --iter;
+            if (iter != coll.end() && ep->is_child_node(iter->second->get_id())) {
+                return false;
+            }
         }
 
         coll[maskv] = ep;
