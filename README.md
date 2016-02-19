@@ -68,7 +68,7 @@ Why not c?
 ### OSX
 1. [brew](http://brew.sh/)
 2. xcode
-3. sudo brew install gcc gdb autoconf automake make curl wget tar m4 cmake cmake
+3. sudo brew install gcc gdb autoconf automake make curl wget tar m4 cmake
 
 支持
 ------
