@@ -29,11 +29,11 @@ CASE_TEST(channel, mem_siso)
     // 4KB header
 
     // 数据初始化
-    char buf_group1[2][32] = {0};
-    char buf_group2[2][45] = {0};
-    char buf_group3[2][133] = {0};
-    char buf_group4[2][605] = {0};
-    char buf_group5[2][1024] = {0};
+    char buf_group1[2][32] = { {0} };
+    char buf_group2[2][45] = { {0} };
+    char buf_group3[2][133] = { {0} };
+    char buf_group4[2][605] = { {0} };
+    char buf_group5[2][1024] = { {0} };
     size_t len_group[] = {32, 45, 133, 605, 1024};
     size_t group_num = sizeof(len_group) / sizeof(size_t);
     char* buf_group[] = {buf_group1[0], buf_group2[0], buf_group3[0], buf_group4[0], buf_group5[0]};

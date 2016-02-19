@@ -28,11 +28,18 @@ if(NOT MSGPACK_FOUND)
         FindConfigurePackageDownloadFile("https://github.com/msgpack/msgpack-c/releases/download/cpp-${3RD_PARTY_MSGPACK_VERSION}/msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz" "${3RD_PARTY_MSGPACK_PKG_DIR}/msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz")
     endif()
     find_program(TAR_EXECUTABLE tar)
-    execute_process(COMMAND ${TAR_EXECUTABLE} -axvf "msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz"
-        WORKING_DIRECTORY ${3RD_PARTY_MSGPACK_PKG_DIR}
-    )
+    if(APPLE)
+        execute_process(COMMAND ${TAR_EXECUTABLE} -xvf "msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz"
+            WORKING_DIRECTORY ${3RD_PARTY_MSGPACK_PKG_DIR}
+        )
+    else()
+        execute_process(COMMAND ${TAR_EXECUTABLE} -axvf "msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz"
+            WORKING_DIRECTORY ${3RD_PARTY_MSGPACK_PKG_DIR}
+        )
+    endif()
+
     
-    if(NOT EXISTS ${3RD_PARTY_MSGPACK_ROOT_DIR})
+    if(NOT EXISTS "${3RD_PARTY_MSGPACK_ROOT_DIR}/include")
         file(MAKE_DIRECTORY ${3RD_PARTY_MSGPACK_ROOT_DIR})
         file(RENAME "${3RD_PARTY_MSGPACK_PKG_DIR}/msgpack-${3RD_PARTY_MSGPACK_VERSION}/include" "${3RD_PARTY_MSGPACK_ROOT_DIR}/include")
     endif()

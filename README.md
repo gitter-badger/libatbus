@@ -34,6 +34,42 @@ Why not c?
 + VC: 10 及以上 （建议VC 12及以上）
 
 
+环境准备(开发环境最小依赖)
+------
+### Windows + MSVC
+1. [cmake](https://cmake.org/download/)
+2. [visual studio](https://www.visualstudio.com)
+3. [libuv](http://dist.libuv.org/dist)
+4. 执行 mkdir build && cd build && cmake .. -G "Visual Studio 14 2015 Win64" -DLIBUV_ROOT=[libuv安装目录]
+
+上面最后一条命令可以根据实际环境修改参数，这里只提供一个示例
+
+### Windows + MinGW(msys2)
+1. for pkg_name in m4 curl wget tar autoconf automake mingw-w64-x86_64-toolchain python; do pacman -S $pkg_name; done
+2. mingw shell 下执行 mkdir build && cd build && cmake .. 
+
+其他MinGW环境请自行安装依赖库
+
+### Linux
+1. gcc 4.4及以上
+2. autoconf
+3. gdb
+4. valgrind
+5. curl
+6. wget
+7. tar
+8. m4
+9. cmake
+10. automake
+11. make
+
+以上请用Linux发行版的包管理器安装，然后正常使用cmake即可
+
+### OSX
+1. [brew](http://brew.sh/)
+2. xcode
+3. sudo brew install gcc gdb autoconf automake make curl wget tar m4 cmake cmake clang
+
 支持
 ------
 Linux下 GCC编译安装脚本(支持离线编译安装):

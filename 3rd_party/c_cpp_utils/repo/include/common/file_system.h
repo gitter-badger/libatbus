@@ -147,12 +147,6 @@ namespace util {
         static FILE* open_tmp_file();
 
         /**
-         * @brief 生成一个临时文件路径
-         * @return 临时文件路径
-         */
-        static std::string generate_tmp_file_path();
-
-        /**
          * @brief 列举目录下所有文件
          * @param dir_path 目录路径
          * @param out 录下所有文件路径

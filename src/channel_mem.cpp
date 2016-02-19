@@ -280,10 +280,10 @@ namespace atbus {
          * @param offset 索引偏移
          * @return 数据块head指针
          */
-        static inline size_t mem_previous_index(mem_channel* channel, size_t index, size_t offset) {
-            assert(channel);
-            return (index + channel->node_count - offset) % channel->node_count;
-        }
+        //static inline size_t mem_previous_index(mem_channel* channel, size_t index, size_t offset) {
+        //    assert(channel);
+        //    return (index + channel->node_count - offset) % channel->node_count;
+        //}
 
         static uint32_t mem_fetch_operation_seq(mem_channel* channel) {
             uint32_t ret = std::atomic_load(&channel->atomic_operation_seq);

@@ -203,19 +203,6 @@ namespace util {
 #endif
     }
 
-    std::string file_system::generate_tmp_file_path() {
-#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L)
-        char buffer[MAX_PATH_LEN] = {0};
-        if(0 == tmpnam_s(buffer, MAX_PATH_LEN)) {
-            return buffer;
-        }
-
-        return std::string();
-#else
-        return tmpnam(NULL);
-#endif
-    }
-
     int file_system::scan_dir(const char* dir_path, std::list<std::string>& out, int options) {
         int ret = 0;
         std::string base_dir = dir_path? dir_path: "";
