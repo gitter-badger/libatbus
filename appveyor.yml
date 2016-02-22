@@ -11,6 +11,7 @@ environment:
     global:
         PREBUILT_ROOT: '%HOME%/prebuilt'
         SETUP_ROOT: '%HOME%/setup'
+        PKG_SRC_ROOT: '%HOME%/pkg_src'
         LIBUV_VERSION: 1.8.0
     matrix:
         - os: Visual Studio 2015
@@ -65,9 +66,29 @@ install:
             
         }
         
+        if ( -not ( Test-Path "$Env:PKG_SRC_ROOT" ) ) { 
+            
+            mkdir $Env:PKG_SRC_ROOT
+            
+        }
+        
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            echo "using inner dep builder."
+            $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-v%LIBUV_VERSION%.tar.gz"
+            
+            if ( Test-Path "$LIBUV_PKG_PATH" ) {
+                
+                echo "using cache $LIBUV_PKG_PATH"   
+                
+            } else {
+                
+                wget "$Env:LIBUV_PKG" -OutFile "$LIBUV_PKG_PATH"
+                
+            }
+            
+            & 7z x -o"$Env:PKG_SRC_ROOT" "$LIBUV_PKG_PATH"
+            
+            & bash -lc 'cd "$Env:PKG_SRC_ROOT/libuv-v%LIBUV_VERSION%" && ./autogen.sh && ./configure --prefix=/usr --with-pic=yes --enable-shared=no --enable-static=yes && make install'
             
         } else {
             if ( Test-Path "$Env:LIBUV_ROOT/libuv.dll" ) {
@@ -78,7 +99,7 @@ install:
                 
                 $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-$PLATFORM-$Env:LIBUV_VERSION.exe"
                 
-                if ( Test-Path "" ) {
+                if ( Test-Path "$LIBUV_PKG_PATH" ) {
                     
                     echo "using cache $LIBUV_PKG_PATH"   
                     
@@ -110,7 +131,7 @@ build_script:
         
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            & bash -lc 'cmake ..'
+            & cmake .. -G "MSYS Makefiles" -DLIBUV_ROOT="$Env:PKG_SRC_ROOT/libuv-v%LIBUV_VERSION%"
             
             & bash -lc 'make -j4'
             
