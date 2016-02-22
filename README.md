@@ -3,6 +3,11 @@ libatbus
 
 用于搭建高性能、全异步(a)、树形结构(t)的BUS消息系统的跨平台框架库
 
+> Build & Run Unit Test in |  Linux | Windows |
+> -------------------------|--------|---------|
+> Status |  [![Build Status](https://travis-ci.org/owt5008137/libatbus.svg?branch=master)](https://travis-ci.org/owt5008137/libatbus) | [![Build status](https://ci.appveyor.com/api/projects/status/xa8jt1gmqkv0n8mi?svg=true)](https://ci.appveyor.com/project/owt5008137/libatbus) |
+>
+
 依赖
 ------
 工具依赖： 支持c++0x或c++11的编译器、cmake、msgpack（用于协议打解包）、libuv（用于网络通道）
