@@ -1,0 +1,146 @@
+#
+# Appveyor configuration file for CI build of hiredis-happ on Windows (under Cygwin)
+#
+# For further details see http://www.appveyor.com
+#
+
+#
+# Custom environment variables
+#
+environment:
+    global:
+        PREBUILT_ROOT: '%HOME%/prebuilt'
+        SETUP_ROOT: '%HOME%/setup'
+        LIBUV_VERSION: 1.8.0
+    matrix:
+        - os: Visual Studio 2015
+          platform: x86
+          LIBUV_PKG: 'http://dist.libuv.org/dist/v%LIBUV_VERSION%/libuv-x86-v%LIBUV_VERSION%.build8.exe'
+          LIBUV_ROOT: '%PREBUILT_ROOT%/x86/%LIBUV_VERSION%'
+          CMAKE_GEN: 'Visual Studio 14 2015 Win32'
+        - os: Visual Studio 2015
+          platform: x64
+          LIBUV_PKG: 'http://dist.libuv.org/dist/v%LIBUV_VERSION%/libuv-x64-v%LIBUV_VERSION%.build8.exe'
+          LIBUV_ROOT: '%PREBUILT_ROOT%/x64/%LIBUV_VERSION%'
+          CMAKE_GEN: 'Visual Studio 14 2015 Win64'
+        - os: MinGW
+          LIBUV_PKG: 'http://dist.libuv.org/dist/v%LIBUV_VERSION%/libuv-v%LIBUV_VERSION%.tar.gz'
+          LIBUV_ROOT: '%PREBUILT_ROOT%/mingw/$LIBUV_VERSION'
+
+configuration: RelWithDebInfo
+    
+#
+# Cache Cygwin files to speed up build
+#
+cache:
+    - '%SETUP_ROOT%'
+    - '%PREBUILT_ROOT%'
+
+#
+# Do a shallow clone of the repo to speed up build
+#
+clone_depth: 1
+
+#
+# Initialisation prior to pulling the Mono repository
+# Attempt to ensure we don't try to convert line endings to Win32 CRLF as this will cause build to fail
+#
+init:
+    - git config --global core.autocrlf input
+
+#
+# Install needed build dependencies
+# 
+install:
+    - ps: >-
+        if ( -not ( Test-Path "$Env:LIBUV_ROOT" ) ) { 
+            
+            mkdir $Env:LIBUV_ROOT
+            
+        }
+        
+        if ( -not ( Test-Path "$Env:SETUP_ROOT" ) ) { 
+            
+            mkdir $Env:SETUP_ROOT
+            
+        }
+        
+        if ( "$Env:OS" -ieq "MinGW" ) {
+            
+            echo "using inner dep builder."
+            
+        } else {
+            if ( Test-Path "$Env:LIBUV_ROOT/libuv.dll" ) {
+                
+                echo "using prebuilt cache $Env:LIBUV_ROOT" 
+                
+            } else {
+                
+                $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-$PLATFORM-$Env:LIBUV_VERSION.exe"
+                
+                if ( Test-Path "" ) {
+                    
+                    echo "using cache $LIBUV_PKG_PATH"   
+                    
+                } else {
+                    
+                    wget "$Env:LIBUV_PKG" -OutFile "$LIBUV_PKG_PATH"
+                    
+                }
+                
+                & 7z x -o"$Env:LIBUV_ROOT" "$LIBUV_PKG_PATH"
+            }
+        }
+
+# Cygwin build script
+#
+# NOTES:
+#
+# The stdin/stdout file descriptor appears not to be valid for the Appveyor
+# build which causes failures as certain functions attempt to redirect 
+# default file handles. Ensure a dummy file descriptor is opened with 'exec'.
+#
+build_script:
+    - ps: >- 
+        mkdir build
+        
+        cd build
+        
+        rm -r *
+        
+        if ( "$Env:OS" -ieq "MinGW" ) {
+            
+            & bash -lc 'cmake ..'
+            
+            & bash -lc 'make -j4'
+            
+        } else {
+            
+            & cmake ..  -G "$Env:CMAKE_GEN" -DLIBUV_ROOT="$Env:LIBUV_ROOT"
+            
+            & "C:\Program Files (x86)\MSBuild\14.0\bin\msbuild.exe" "libatbus.sln" /verbosity:minimal /p:Configuration=$Env:CONFIGURATION /p:Platform=$PLATFORM
+        }
+#
+# Run unit test
+# 
+test_script:
+    - ps: >- 
+        if ( "$Env:OS" -ieq "MinGW" ) {
+            
+            & bash -lc './test/unit_test.exe'
+            
+        } else {
+            
+            cp -Force "$Env:LIBUV_ROOT/libuv.dll" ./
+            
+            test/$Env:CONFIGURATION/unit_test.exe
+        }
+
+#
+# Only build the master branch
+#
+branches:
+  only:
+    - master
+
+# no need artifacts
