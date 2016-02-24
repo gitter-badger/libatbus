@@ -285,7 +285,6 @@ CASE_TEST(channel, io_stream_tcp_reset_by_client)
     CASE_EXPECT_EQ(1, g_check_flag);
     CASE_EXPECT_NE(NULL, svr.ev_loop);
     if (0 == inited_fds) {
-        uv_loop_close(&loop);
         return;
     }
 
@@ -331,7 +330,6 @@ CASE_TEST(channel, io_stream_tcp_reset_by_server)
     CASE_EXPECT_EQ(1, g_check_flag);
     CASE_EXPECT_NE(NULL, svr.ev_loop);
     if (0 == inited_fds) {
-        uv_loop_close(&loop);
         return;
     }
 
