@@ -5,6 +5,8 @@ set (3RD_PARTY_MSGPACK_PKG_DIR "${3RD_PARTY_MSGPACK_BASE_DIR}/pkg")
 
 set (3RD_PARTY_MSGPACK_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/prebuilt/${PLATFORM_BUILD_PLATFORM_NAME}")
 
+set(3RD_PARTY_MSGPACK_VERSION "1.4.0")
+
 if (Msgpack_ROOT)
     set(MSGPACK_ROOT ${Msgpack_ROOT})
 endif()
@@ -23,7 +25,6 @@ if(NOT MSGPACK_FOUND)
         file(MAKE_DIRECTORY ${3RD_PARTY_MSGPACK_PKG_DIR})
     endif()
     
-    set(3RD_PARTY_MSGPACK_VERSION "1.4.0")
     if(NOT EXISTS "${3RD_PARTY_MSGPACK_PKG_DIR}/msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz")
         FindConfigurePackageDownloadFile("https://github.com/msgpack/msgpack-c/releases/download/cpp-${3RD_PARTY_MSGPACK_VERSION}/msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz" "${3RD_PARTY_MSGPACK_PKG_DIR}/msgpack-${3RD_PARTY_MSGPACK_VERSION}.tar.gz")
     endif()
@@ -56,6 +57,12 @@ if(MSGPACK_FOUND)
 else()
     EchoWithColor(COLOR RED "-- Dependency: Msgpack is required")
     message(FATAL_ERROR "Msgpack not found")
+endif()
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    if (NOT CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 11)
+        add_definitions(-Wno-pragmas)
+    endif()
 endif()
 
 set (3RD_PARTY_MSGPACK_INC_DIR ${MSGPACK_INCLUDE_DIRS})

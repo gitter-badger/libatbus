@@ -82,7 +82,7 @@ install:
                 
             } else {
                 
-                wget "$Env:LIBUV_PKG" -OutFile "$LIBUV_PKG_PATH"
+                Invoke-WebRequest "$Env:LIBUV_PKG" -OutFile "$LIBUV_PKG_PATH"
                 
             }
             
@@ -105,7 +105,7 @@ install:
                     
                 } else {
                     
-                    wget "$Env:LIBUV_PKG" -OutFile "$LIBUV_PKG_PATH"
+                    Invoke-WebRequest "$Env:LIBUV_PKG" -OutFile "$LIBUV_PKG_PATH"
                     
                 }
                 

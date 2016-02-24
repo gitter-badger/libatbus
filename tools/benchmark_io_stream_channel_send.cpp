@@ -22,7 +22,7 @@ struct run_config {
     size_t sum_send_times;
     size_t sum_send_full;
     size_t sum_send_err;
-    size_t sum_seq = ((size_t)rand() << 32);
+    size_t sum_seq;
 };
 
 run_config conf;
