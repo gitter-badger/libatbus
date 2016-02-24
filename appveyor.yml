@@ -9,9 +9,9 @@
 #
 environment:
     global:
-        PREBUILT_ROOT: '%HOME%/prebuilt'
-        SETUP_ROOT: '%HOME%/setup'
-        PKG_SRC_ROOT: '%HOME%/pkg_src'
+        PREBUILT_ROOT: '%USERPROFILE%/prebuilt'
+        SETUP_ROOT: '%USERPROFILE%/setup'
+        PKG_SRC_ROOT: '%USERPROFILE%/pkg_src'
         LIBUV_VERSION: 1.8.0
     matrix:
         - os: Visual Studio 2015
@@ -74,7 +74,7 @@ install:
         
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-v%LIBUV_VERSION%.tar.gz"
+            $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-v$Env:LIBUV_VERSION.tar.gz"
             
             if ( Test-Path "$LIBUV_PKG_PATH" ) {
                 
@@ -88,7 +88,7 @@ install:
             
             & 7z x -o"$Env:PKG_SRC_ROOT" "$LIBUV_PKG_PATH"
             
-            & bash -lc 'cd "$Env:PKG_SRC_ROOT/libuv-v%LIBUV_VERSION%" && ./autogen.sh && ./configure --prefix=/usr --with-pic=yes --enable-shared=no --enable-static=yes && make install'
+            & bash -lc 'cd "$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION" && ./autogen.sh && ./configure --prefix=/usr --with-pic=yes --enable-shared=no --enable-static=yes && make install'
             
         } else {
             if ( Test-Path "$Env:LIBUV_ROOT/libuv.dll" ) {
@@ -131,7 +131,7 @@ build_script:
         
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            & cmake .. -G "MSYS Makefiles" -DLIBUV_ROOT="$Env:PKG_SRC_ROOT/libuv-v%LIBUV_VERSION%"
+            & cmake .. -G "MSYS Makefiles" -DLIBUV_ROOT="$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION"
             
             & bash -lc 'make -j4'
             
