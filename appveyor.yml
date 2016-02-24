@@ -9,24 +9,24 @@
 #
 environment:
     global:
-        PREBUILT_ROOT: 'C:/Users/appveyor/prebuilt'
-        SETUP_ROOT: 'C:/Users/appveyor/setup'
-        PKG_SRC_ROOT: 'C:/Users/appveyor/pkg_src'
+        PREBUILT_ROOT: C:/Users/appveyor/prebuilt
+        SETUP_ROOT: C:/Users/appveyor/setup
+        PKG_SRC_ROOT: C:/Users/appveyor/pkg_src
         LIBUV_VERSION: 1.8.0
     matrix:
         - os: Visual Studio 2015
           platform: x86
-          LIBUV_PKG: 'http://dist.libuv.org/dist/v1.8.0/libuv-x86-v1.8.0.build8.exe'
-          LIBUV_ROOT: 'C:/Users/appveyor/prebuilt/x86/1.8.0'
-          CMAKE_GEN: 'Visual Studio 14 2015 Win32'
+          LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-x86-v1.8.0.build8.exe
+          LIBUV_ROOT: C:/Users/appveyor/prebuilt/x86/1.8.0
+          CMAKE_GEN: Visual Studio 14 2015 Win32
         - os: Visual Studio 2015
           platform: x64
-          LIBUV_PKG: 'http://dist.libuv.org/dist/v1.8.0/libuv-x64-v1.8.0.build8.exe'
-          LIBUV_ROOT: 'C:/Users/appveyor/prebuilt/x64/1.8.0'
-          CMAKE_GEN: 'Visual Studio 14 2015 Win64'
+          LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-x64-v1.8.0.build8.exe
+          LIBUV_ROOT: C:/Users/appveyor/prebuilt/x64/1.8.0
+          CMAKE_GEN: Visual Studio 14 2015 Win64
         - os: MinGW
-          LIBUV_PKG: 'http://dist.libuv.org/dist/v1.8.0/libuv-v1.8.0.tar.gz'
-          LIBUV_ROOT: 'C:/Users/appveyor/prebuilt/mingw/1.8.0'
+          LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-v1.8.0.tar.gz
+          LIBUV_ROOT: C:/Users/appveyor/prebuilt/mingw/1.8.0
 
 configuration: RelWithDebInfo
     
@@ -56,19 +56,19 @@ install:
     - ps: >-
         if ( -not ( Test-Path "$Env:LIBUV_ROOT" ) ) { 
             
-            mkdir $Env:LIBUV_ROOT
+            mkdir "$Env:LIBUV_ROOT"
             
         }
         
         if ( -not ( Test-Path "$Env:SETUP_ROOT" ) ) { 
             
-            mkdir $Env:SETUP_ROOT
+            mkdir "$Env:SETUP_ROOT"
             
         }
         
         if ( -not ( Test-Path "$Env:PKG_SRC_ROOT" ) ) { 
             
-            mkdir $Env:PKG_SRC_ROOT
+            mkdir "$Env:PKG_SRC_ROOT"
             
         }
         
@@ -86,9 +86,13 @@ install:
                 
             }
             
+            echo "7z x -o'$Env:PKG_SRC_ROOT' '$LIBUV_PKG_PATH'" 
+            
             & 7z x -o"$Env:PKG_SRC_ROOT" "$LIBUV_PKG_PATH"
             
-            & bash -lc 'cd "$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION" && ./autogen.sh && ./configure --prefix=/usr --with-pic=yes --enable-shared=no --enable-static=yes && make install'
+            echo "bash -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install" 
+            
+            & bash -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install"
             
         } else {
             if ( Test-Path "$Env:LIBUV_ROOT/libuv.dll" ) {
@@ -97,7 +101,7 @@ install:
                 
             } else {
                 
-                $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-$PLATFORM-$Env:LIBUV_VERSION.exe"
+                $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-$Env:PLATFORM-$Env:LIBUV_VERSION.exe"
                 
                 if ( Test-Path "$LIBUV_PKG_PATH" ) {
                     
@@ -108,6 +112,8 @@ install:
                     Invoke-WebRequest "$Env:LIBUV_PKG" -OutFile "$LIBUV_PKG_PATH"
                     
                 }
+                
+                echo "7z x -o'$Env:LIBUV_ROOT' '$LIBUV_PKG_PATH'" 
                 
                 & 7z x -o"$Env:LIBUV_ROOT" "$LIBUV_PKG_PATH"
             }
@@ -127,19 +133,25 @@ build_script:
         
         cd build
         
-        rm -r *
+        Remove-Item -r *
         
         if ( "$Env:OS" -ieq "MinGW" ) {
             
+            echo "cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION'" 
+            
             & cmake .. -G "MSYS Makefiles" -DLIBUV_ROOT="$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION"
             
-            & bash -lc 'make -j4'
+            & bash -lc "make -j4"
             
         } else {
             
+            echo "cmake ..  -G '$Env:CMAKE_GEN' -DLIBUV_ROOT='$Env:LIBUV_ROOT'" 
+            
             & cmake ..  -G "$Env:CMAKE_GEN" -DLIBUV_ROOT="$Env:LIBUV_ROOT"
             
-            & "C:\Program Files (x86)\MSBuild\14.0\bin\msbuild.exe" "libatbus.sln" /verbosity:minimal /p:Configuration=$Env:CONFIGURATION /p:Platform=$PLATFORM
+            echo "'C:\Program Files (x86)\MSBuild\14.0\bin\msbuild.exe' 'libatbus.sln' /verbosity:minimal /p:Configuration=$Env:CONFIGURATION /p:Platform=$Env:PLATFORM"
+            
+            & "C:\Program Files (x86)\MSBuild\14.0\bin\msbuild.exe" "libatbus.sln" /verbosity:minimal /p:Configuration=$Env:CONFIGURATION /p:Platform=$Env:PLATFORM
         }
 #
 # Run unit test
@@ -148,11 +160,11 @@ test_script:
     - ps: >- 
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            & bash -lc './test/unit_test.exe'
+            & bash -lc "./test/unit_test.exe"
             
         } else {
             
-            cp -Force "$Env:LIBUV_ROOT/libuv.dll" ./
+            Copy-Item -Force "$Env:LIBUV_ROOT/libuv.dll" ./
             
             test/$Env:CONFIGURATION/unit_test.exe
         }
