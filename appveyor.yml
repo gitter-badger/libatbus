@@ -15,11 +15,6 @@ environment:
         LIBUV_VERSION: 1.8.0
     matrix:
         - os: Visual Studio 2015
-          platform: x86
-          LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-x86-v1.8.0.build8.exe
-          LIBUV_ROOT: C:/Users/appveyor/prebuilt/x86/1.8.0
-          CMAKE_GEN: Visual Studio 14 2015 Win32
-        - os: Visual Studio 2015
           platform: x64
           LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-x64-v1.8.0.build8.exe
           LIBUV_ROOT: C:/Users/appveyor/prebuilt/x64/1.8.0
@@ -76,6 +71,8 @@ install:
             
             $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-v$Env:LIBUV_VERSION.tar.gz"
             
+            $LIBUV_TAR_PATH="$Env:SETUP_ROOT/libuv-v$Env:LIBUV_VERSION.tar"
+            
             if ( Test-Path "$LIBUV_PKG_PATH" ) {
                 
                 echo "using cache $LIBUV_PKG_PATH"   
@@ -89,6 +86,10 @@ install:
             echo "7z x -o'$Env:PKG_SRC_ROOT' '$LIBUV_PKG_PATH'" 
             
             & 7z x -o"$Env:PKG_SRC_ROOT" "$LIBUV_PKG_PATH"
+            
+            echo "7z x -o'$Env:PKG_SRC_ROOT' '$LIBUV_TAR_PATH'" 
+            
+            & 7z x -o"$Env:PKG_SRC_ROOT" "$LIBUV_TAR_PATH"
             
             echo "bash -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install" 
             
@@ -119,7 +120,7 @@ install:
             }
         }
 
-# Cygwin build script
+# Build script
 #
 # NOTES:
 #
@@ -166,7 +167,7 @@ test_script:
             
             Copy-Item -Force "$Env:LIBUV_ROOT/libuv.dll" ./
             
-            test/$Env:CONFIGURATION/unit_test.exe
+            & "test/$Env:CONFIGURATION/unit_test.exe"
         }
 
 #
