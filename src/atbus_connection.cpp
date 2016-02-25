@@ -311,13 +311,13 @@ namespace atbus {
             if (NULL != owner_) {
                 int res = conn_data_.free_fn(*owner_, *this);
                 if (res < 0) {
-                    ATBUS_FUNC_NODE_DEBUG(*owner_, get_binding(), this, "destroy connection failed, res: %d", res);
+                    ATBUS_FUNC_NODE_DEBUG(*owner_, get_binding(), this, NULL, "destroy connection failed, res: %d", res);
                 }
             }
         }
 
         if (NULL != owner_) {
-            ATBUS_FUNC_NODE_DEBUG(*owner_, get_binding(), this, "connection disconnected");
+            ATBUS_FUNC_NODE_DEBUG(*owner_, get_binding(), this, NULL, "connection disconnected");
             owner_->on_disconnect(this);
         }
 
@@ -424,7 +424,7 @@ namespace atbus {
             connection->data = async_data->conn.get();
 
 
-            ATBUS_FUNC_NODE_DEBUG(*async_data->owner_node, NULL, async_data->conn.get(), "finish a new connection");
+            ATBUS_FUNC_NODE_DEBUG(*async_data->owner_node, NULL, async_data->conn.get(), NULL, "connection connected");
             async_data->owner_node->on_new_connection(async_data->conn.get());
         }
 
@@ -479,7 +479,7 @@ namespace atbus {
         conn_ios->data = conn.get();
 
 
-        ATBUS_FUNC_NODE_DEBUG(*n, NULL, conn.get(), "accept a new connection");
+        ATBUS_FUNC_NODE_DEBUG(*n, NULL, conn.get(), NULL, "connection accepted");
         n->on_new_connection(conn.get());
     }
 
@@ -494,7 +494,7 @@ namespace atbus {
             return;
         }
 
-        ATBUS_FUNC_NODE_DEBUG(*conn->owner_, conn->get_binding(), conn, "connection reset by peer");
+        ATBUS_FUNC_NODE_DEBUG(*conn->owner_, conn->get_binding(), conn, NULL, "connection reset by peer");
         conn->reset();
     }
 

@@ -73,6 +73,12 @@ namespace atbus {
             return EN_ATBUS_ERR_BAD_DATA;
         }
 
+        ATBUS_FUNC_NODE_DEBUG(n, NULL == conn ? conn->get_binding() : NULL, conn, m,
+            "node recv msg(cmd=%s, type=%d, sequence=%u, ret=%d)",
+            detail::get_cmd_name(m->head.cmd),
+            m->head.type, m->head.sequence, m->head.ret
+        );
+
         if (m->head.cmd >= ATBUS_CMD_MAX || m->head.cmd <= 0) {
             return EN_ATBUS_ERR_ATNODE_INVALID_MSG;
         }
@@ -144,12 +150,13 @@ namespace atbus {
             return EN_ATBUS_ERR_BUFF_LIMIT;
         }
 
-        ATBUS_FUNC_NODE_DEBUG(n, conn.get_binding(), &conn, 
-            "node send msg(cmd=%s, type=%d, length=%llu)", 
+        ATBUS_FUNC_NODE_DEBUG(n, conn.get_binding(), &conn, &m, 
+            "node send msg(cmd=%s, type=%d, sequence=%u, ret=%d, length=%llu)", 
             detail::get_cmd_name(m.head.cmd), 
-            m.head.type,
+            m.head.type, m.head.sequence, m.head.ret,
             static_cast<unsigned long long>(packed_buffer.size())
-       );
+        );
+        
         return conn.push(packed_buffer.data(), packed_buffer.size());;
     }
 
@@ -160,7 +167,11 @@ namespace atbus {
         }
 
         if (m.body.forward->to == n.get_id()) {
-            ATBUS_FUNC_NODE_DEBUG(n, (NULL == conn?NULL: conn->get_binding()), conn, "node recv data length = %lld", static_cast<unsigned long long>(m.body.forward->content.size));
+            ATBUS_FUNC_NODE_DEBUG(
+                n, (NULL == conn?NULL: conn->get_binding()), conn, 
+                &m, 
+                "node recv data length = %lld", static_cast<unsigned long long>(m.body.forward->content.size)
+            );
             n.on_recv_data(conn->get_binding(), conn, m.head.type, m.body.forward->content.ptr, m.body.forward->content.size);
 
             if (m.body.forward->check_flag(atbus::protocol::forward_data::FLAG_REQUIRE_RSP)) {
@@ -288,7 +299,7 @@ namespace atbus {
                     break;
                 }
 
-                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "connection already connected recv req");
+                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, &m, "connection already connected recv req");
                 break;
             }
 
@@ -306,7 +317,7 @@ namespace atbus {
                 }
                 rsp_code = res;
 
-                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "connection added to existed endpoint, res: %d", res);
+                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, &m, "connection added to existed endpoint, res: %d", res);
                 break;
             }
 
@@ -315,7 +326,7 @@ namespace atbus {
                 if(m.body.reg->has_global_tree && false == n.get_self_endpoint()->get_flag(endpoint::flag_t::GLOBAL_ROUTER)) {
                     rsp_code = EN_ATBUS_ERR_ACCESS_DENY;
 
-                    ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "self has no global tree, children reg access deny");
+                    ATBUS_FUNC_NODE_DEBUG(n, ep, conn, &m, "self has no global tree, children reg access deny");
                     break;
                 }
 
@@ -323,7 +334,7 @@ namespace atbus {
                 if (n.get_self_endpoint()->get_children_mask() <= m.body.reg->children_id_mask) {
                     rsp_code = EN_ATBUS_ERR_ATNODE_MASK_CONFLICT;
 
-                    ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "child mask must be greater than child node");
+                    ATBUS_FUNC_NODE_DEBUG(n, ep, conn, &m, "child mask must be greater than child node");
                     break;
                 }
             }
@@ -344,7 +355,7 @@ namespace atbus {
             }
             ep->set_flag(endpoint::flag_t::GLOBAL_ROUTER, m.body.reg->has_global_tree);
 
-            ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node add a new endpoint, res: %d", res);
+            ATBUS_FUNC_NODE_DEBUG(n, ep, conn, &m, "node add a new endpoint, res: %d", res);
             // 新的endpoint要建立所有连接
             ep->add_connection(conn, false);
             bool has_data_conn = false;
@@ -398,7 +409,7 @@ namespace atbus {
             if (conn->get_address().address == n.get_conf().father_address) {
                 if (!n.check(node::flag_t::EN_FT_ACTIVED)) {
 
-                    ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node register to parent node failed, shutdown");
+                    ATBUS_FUNC_NODE_DEBUG(n, ep, conn, &m, "node register to parent node failed, shutdown");
                     n.shutdown(m.head.ret);
                 }
             }
@@ -428,7 +439,7 @@ namespace atbus {
             return EN_ATBUS_ERR_BAD_DATA;
         }
 
-        ATBUS_FUNC_NODE_DEBUG(n, NULL, NULL, "node recv conn_syn and prepare connect to %s", m.body.conn->address.address.c_str());
+        ATBUS_FUNC_NODE_DEBUG(n, NULL, NULL, &m, "node recv conn_syn and prepare connect to %s", m.body.conn->address.address.c_str());
         int ret = n.connect(m.body.conn->address.address.c_str());
         if (ret < 0) {
             ATBUS_FUNC_NODE_ERROR(n, n.get_self_endpoint(), NULL, ret, 0);
@@ -447,7 +458,6 @@ namespace atbus {
         if (NULL != conn) {
             endpoint* ep = conn->get_binding();
             if (NULL != ep) {
-                ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node recv ping");
                 return n.send_ctrl_msg(ep->get_id(), m);
             }
         }
@@ -463,7 +473,6 @@ namespace atbus {
 
         if (NULL != conn) {
             endpoint* ep = conn->get_binding();
-            ATBUS_FUNC_NODE_DEBUG(n, ep, conn, "node recv pong");
 
             if (NULL != ep && m.head.sequence == ep->get_stat_ping()) {
                 ep->set_stat_ping(0);

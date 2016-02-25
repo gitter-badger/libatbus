@@ -52,7 +52,7 @@ namespace atbus {
     }
 
     node::~node() {
-        ATBUS_FUNC_NODE_DEBUG(*this, NULL, NULL, "node destroyed");
+        ATBUS_FUNC_NODE_DEBUG(*this, NULL, NULL, NULL, "node destroyed");
 
         if (state_t::CREATED != state_) {
             reset();
@@ -352,7 +352,7 @@ namespace atbus {
         // 记录监听地址
         self_->add_listen(conn->get_address().address);
 
-        ATBUS_FUNC_NODE_DEBUG(*this, self_.get(), conn.get(), "listen to %s, res: %d", addr_str, ret);
+        ATBUS_FUNC_NODE_DEBUG(*this, self_.get(), conn.get(), NULL, "listen to %s, res: %d", addr_str, ret);
 
         return EN_ATBUS_ERR_SUCCESS;
     }
@@ -375,7 +375,7 @@ namespace atbus {
             return ret;
         }
 
-        ATBUS_FUNC_NODE_DEBUG(*this, NULL, conn.get(), "connect to %s, res: %d", addr_str, ret);
+        ATBUS_FUNC_NODE_DEBUG(*this, NULL, conn.get(), NULL, "connect to %s, res: %d", addr_str, ret);
 
         return EN_ATBUS_ERR_SUCCESS;
     }
@@ -395,7 +395,7 @@ namespace atbus {
             return ret;
         }
 
-        ATBUS_FUNC_NODE_DEBUG(*this, ep, conn.get(), "connect to %s and bind to a endpoint, res: %d", addr_str, ret);
+        ATBUS_FUNC_NODE_DEBUG(*this, ep, conn.get(), NULL, "connect to %s and bind to a endpoint, res: %d", addr_str, ret);
 
         if (0 == UTIL_STRFUNC_STRNCASE_CMP("mem:", addr_str, 4) ||
             0 == UTIL_STRFUNC_STRNCASE_CMP("shm:", addr_str, 4)

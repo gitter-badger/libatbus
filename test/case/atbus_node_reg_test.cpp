@@ -22,7 +22,10 @@
 
 #include <stdarg.h>
 
-static void node_reg_test_on_debug(const char* file_path, size_t line, const atbus::node& n, const atbus::endpoint* ep, const atbus::connection* conn, const char* fmt, ...) {
+static void node_reg_test_on_debug(const char* file_path, size_t line, 
+    const atbus::node& n, const atbus::endpoint* ep, const atbus::connection* conn, 
+    const atbus::protocol::msg* m,
+    const char* fmt, ...) {
     size_t offset = 0;
     for (size_t i = 0; file_path[i]; ++i) {
         if ('/' == file_path[i] || '\\' == file_path[i]) {
@@ -46,6 +49,10 @@ static void node_reg_test_on_debug(const char* file_path, size_t line, const atb
     va_end(ap);
 
     puts("");
+
+    if (NULL != m) {
+        std::cout << *m << std::endl;
+    }
 }
 
 struct node_reg_test_recv_msg_record_t {

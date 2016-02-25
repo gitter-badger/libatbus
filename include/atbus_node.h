@@ -479,7 +479,7 @@ namespace atbus {
 
         // 调试辅助函数
     public:
-        void (*on_debug)(const char* file_path, size_t line, const node&, const endpoint*, const connection*, const char* fmt, ...);
+        void (*on_debug)(const char* file_path, size_t line, const node&, const endpoint*, const connection*, const protocol::msg*, const char* fmt, ...);
     };
 }
 
@@ -487,9 +487,9 @@ namespace atbus {
 #define ATBUS_FUNC_NODE_ERROR(n, ep, conn, status, errorcode) (n).on_error(__FILE__, __LINE__, (ep), (conn), (status), (errorcode))
 
 #ifdef _MSC_VER
-#define ATBUS_FUNC_NODE_DEBUG(n, ep, conn, fmt, ...) if ((n).on_debug) { (n).on_debug(__FILE__, __LINE__, (n), (ep), (conn), fmt, __VA_ARGS__); }
+#define ATBUS_FUNC_NODE_DEBUG(n, ep, conn, m, fmt, ...) if ((n).on_debug) { (n).on_debug(__FILE__, __LINE__, (n), (ep), (conn), (m), fmt, __VA_ARGS__); }
 #else
-#define ATBUS_FUNC_NODE_DEBUG(n, ep, conn, fmt, args...) if ((n).on_debug) { (n).on_debug(__FILE__, __LINE__, (n), (ep), (conn), fmt, ##args); }
+#define ATBUS_FUNC_NODE_DEBUG(n, ep, conn, m, fmt, args...) if ((n).on_debug) { (n).on_debug(__FILE__, __LINE__, (n), (ep), (conn),(m), fmt, ##args); }
 #endif
 
 

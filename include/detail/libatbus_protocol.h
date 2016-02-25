@@ -5,6 +5,8 @@
 
 #include <cstddef>
 #include <stdint.h>
+#include <ostream>
+
 #include <msgpack.hpp>
 
 enum ATBUS_PROTOCOL_CMD {
@@ -38,6 +40,14 @@ namespace atbus {
         struct bin_data_block {
             const void* ptr;
             size_t size;
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const bin_data_block& mbc) {
+                if (NULL != mbc.ptr && mbc.size > 0) {
+                    os.write(reinterpret_cast<const CharT*>(mbc.ptr), mbc.size / sizeof(CharT));
+                }
+                return os;
+            }
         };
 
         struct custom_command_data {
@@ -47,6 +57,22 @@ namespace atbus {
             custom_command_data(): from(0) {}
 
             MSGPACK_DEFINE(from, commands);
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const custom_command_data& mbc) {
+                os << "{" << std::endl <<
+                    "      from: " << mbc.from << std::endl;
+                if (!mbc.commands.empty()) {
+                    os << "      commands:";
+                    for (size_t i = 0; i < mbc.commands.size(); ++i) {
+                        os << " " << mbc.commands[i];
+                    }
+                    os << std::endl;
+                }
+                os << "    }";
+
+                return os;
+            }
         };
 
         struct forward_data {
@@ -70,11 +96,43 @@ namespace atbus {
             inline void unset_flag(flag_t f) { flags &= ~(1 << f); }
 
             MSGPACK_DEFINE(from, to, router, content, flags);
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const forward_data& mbc) {
+                os << "{" << std::endl <<
+                    "      from: " << mbc.from << std::endl <<
+                    "      to: " << mbc.to << std::endl;
+                if (!mbc.router.empty()) {
+                    os << "      router: ";
+                    for (size_t i = 0; i < mbc.router.size(); ++i) {
+                        if (0 != i) {
+                            os << ", ";
+                        }
+                        os << mbc.router[i];
+                    }
+                    os << std::endl;
+                }
+
+                os << "      content: " << mbc.content << std::endl;
+                os << "      flags: " << mbc.flags << std::endl;
+                os<< "    }";
+
+                return os;
+            }
         };
 
         struct channel_data {
             std::string address;                        // ID: 0
             MSGPACK_DEFINE(address);
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const channel_data& mbc) {
+                os << "{" << std::endl <<
+                    "        address: " << mbc.address << std::endl <<
+                    "      }";
+
+                return os;
+            }
         };
 
         struct node_data {
@@ -87,12 +145,41 @@ namespace atbus {
             node_data() : bus_id(0), overwrite(false), has_global_tree(false), children_id_mask(0){}
 
             MSGPACK_DEFINE(bus_id, overwrite, has_global_tree, children_id_mask, children);
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const node_data& mbc) {
+                os << "{" << std::endl <<
+                    "        bus_id: " << mbc.bus_id << std::endl <<
+                    "        overwrite: " << mbc.overwrite << std::endl <<
+                    "        has_global_tree: " << mbc.has_global_tree << std::endl <<
+                    "        children_id_mask: " << mbc.children_id_mask << std::endl<< 
+                    "        children: (" << mbc.children.size() << ")"<< std::endl;
+                for (size_t i = 0; i < mbc.children.size(); ++i) {
+                    os << "      " << mbc.children[i]<< std::endl;
+                }
+                os << std::endl <<
+                    "      }";
+
+                return os;
+            }
         };
 
         struct node_tree {
             std::vector<node_data> nodes;               // ID: 0
 
             MSGPACK_DEFINE(nodes);
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const node_tree& mbc) {
+                os << "{" << std::endl;
+                for (size_t i = 0; i < mbc.nodes.size(); ++i) {
+                    os << "      nodes: " << mbc.nodes[i] << std::endl;
+                }
+                    
+                os<< "    }";
+
+                return os;
+            }
         };
 
         struct ping_data {
@@ -101,6 +188,15 @@ namespace atbus {
             ping_data(): time_point(0) {}
 
             MSGPACK_DEFINE(time_point);
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const ping_data& mbc) {
+                os << "{" << std::endl <<
+                    "      time_point: " << mbc.time_point << std::endl <<
+                    "    }";
+
+                return os;
+            }
         };
 
         struct reg_data {
@@ -115,12 +211,37 @@ namespace atbus {
             reg_data():bus_id(0), pid(0), children_id_mask(0), has_global_tree(false) {}
 
             MSGPACK_DEFINE(bus_id, pid, hostname, channels, children_id_mask, has_global_tree);
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const reg_data& mbc) {
+                os << "{" << std::endl <<
+                    "      bus_id: " << mbc.bus_id << std::endl <<
+                    "      pid: " << mbc.pid << std::endl <<
+                    "      hostname: " << mbc.hostname << std::endl;
+                for (size_t i = 0; i < mbc.channels.size(); ++i) {
+                    os << "      channels: " << mbc.channels[i] << std::endl;
+                }
+                os<< "      children_id_mask: " << mbc.children_id_mask << std::endl <<
+                    "      has_global_tree: " << mbc.has_global_tree << std::endl <<
+                    "    }";
+
+                return os;
+            }
         };
 
         struct conn_data {
             channel_data address;                   // ID: 0
 
             MSGPACK_DEFINE(address);
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const conn_data& mbc) {
+                os << "{" << std::endl <<
+                    "      address: " << mbc.address << std::endl <<
+                    "    }";
+
+                return os;
+            }
         };
 
         class msg_body {
@@ -181,6 +302,40 @@ namespace atbus {
                 return ret;
             }
 
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const msg_body& mb) {
+                os << "{" << std::endl;
+
+                if (NULL != mb.forward) {
+                    os << "    forward:" << *mb.forward << std::endl;
+                }
+
+                if (NULL != mb.sync) {
+                    os << "    sync:" << *mb.sync << std::endl;
+                }
+
+                if (NULL != mb.ping) {
+                    os << "    ping:" << *mb.ping << std::endl;
+                }
+
+                if (NULL != mb.reg) {
+                    os << "    reg:" << *mb.reg << std::endl;
+                }
+
+                if (NULL != mb.conn) {
+                    os << "    conn:" << *mb.conn << std::endl;
+                }
+
+                if (NULL != mb.custom) {
+                    os << "    custom:" << *mb.custom << std::endl;
+                }
+
+                os << "  }";
+
+                return os;
+            }
+
         private:
             msg_body(const msg_body&);
             msg_body& operator=(const msg_body&);
@@ -196,6 +351,20 @@ namespace atbus {
             msg_head(): cmd(ATBUS_CMD_INVALID), type(0), ret(0), sequence(0) {}
 
             MSGPACK_DEFINE(cmd, type, ret, sequence, src_bus_id);
+
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const msg_head& mh) {
+                os << "{" << std::endl <<
+                    "    cmd: " << mh.cmd << std::endl <<
+                    "    type: " << mh.type << std::endl <<
+                    "    ret: " << mh.ret << std::endl <<
+                    "    sequence: " << mh.sequence << std::endl <<
+                    "    src_bus_id: " << mh.src_bus_id << std::endl <<
+                    "  }";
+
+                return os;
+            }
         };
 
         struct msg {
@@ -208,6 +377,16 @@ namespace atbus {
                 head.ret = ret;
                 head.sequence = seq;
                 head.src_bus_id = src_bus_id;
+            }
+
+            template<typename CharT, typename Traits>
+            friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const msg& m) {
+                os << "{" << std::endl <<
+                    "  head: " << m.head << std::endl <<
+                    "  body:" << m.body << std::endl <<
+                    "}";
+
+                return os;
             }
         };
     }
