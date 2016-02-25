@@ -34,8 +34,9 @@ configuration: RelWithDebInfo
 # Cache Cygwin files to speed up build
 #
 cache:
-    - '%SETUP_ROOT%'
-    - '%PREBUILT_ROOT%'
+    - C:\Users\appveyor\setup
+    - C:\Users\appveyor\prebuilt
+    - C:\Users\appveyor\pkg_src
 
 #
 # Do a shallow clone of the repo to speed up build
@@ -73,6 +74,8 @@ install:
         }
         
         if ( "$Env:OS" -ieq "MinGW" ) {
+            
+            & C:\MinGW\bin\mingw-get install msys-automake msys-autoconf msys-m4 msys-tar msys-wget msys-libtool mingw32-automake mingw32-autoconf mingw32-libtool mingw32-gcc-tools
             
             $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-v$Env:LIBUV_VERSION.tar.gz"
             

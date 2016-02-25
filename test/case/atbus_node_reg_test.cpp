@@ -50,9 +50,9 @@ static void node_reg_test_on_debug(const char* file_path, size_t line,
 
     puts("");
 
-    if (NULL != m) {
-        std::cout << *m << std::endl;
-    }
+    //if (NULL != m) {
+    //    std::cout << *m << std::endl;
+    //}
 }
 
 struct node_reg_test_recv_msg_record_t {
