@@ -50,9 +50,16 @@ static void node_reg_test_on_debug(const char* file_path, size_t line,
 
     puts("");
 
-    //if (NULL != m) {
-    //    std::cout << *m << std::endl;
-    //}
+#ifdef _MSC_VER
+
+    static char* APPVEYOR = getenv("APPVEYOR");
+    static char* CI = getenv("CI");
+    
+    // appveyor ci open msg content
+    if (APPVEYOR && APPVEYOR[0] && CI && CI[0] && NULL != m) {
+        std::cout << *m << std::endl;
+    }
+#endif
 }
 
 struct node_reg_test_recv_msg_record_t {
