@@ -19,6 +19,11 @@ environment:
           LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-x64-v1.8.0.build8.exe
           LIBUV_ROOT: C:/Users/appveyor/prebuilt/x64/1.8.0
           CMAKE_GEN: Visual Studio 14 2015 Win64
+        - os: Visual Studio 2013
+          platform: x64
+          LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-x64-v1.8.0.build8.exe
+          LIBUV_ROOT: C:/Users/appveyor/prebuilt/x64/1.8.0
+          CMAKE_GEN: Visual Studio 12 2013 Win64
         - os: MinGW
           LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-v1.8.0.tar.gz
           LIBUV_ROOT: C:/Users/appveyor/prebuilt/mingw/1.8.0
@@ -85,7 +90,7 @@ install:
             
             echo "7z x -o'$Env:PKG_SRC_ROOT' '$LIBUV_PKG_PATH'" 
             
-            & 7z x -o"$Env:PKG_SRC_ROOT" "$LIBUV_PKG_PATH"
+            & 7z x -o"$Env:SETUP_ROOT" "$LIBUV_PKG_PATH"
             
             echo "7z x -o'$Env:PKG_SRC_ROOT' '$LIBUV_TAR_PATH'" 
             

@@ -95,6 +95,18 @@ static int node_msg_test_send_data_failed_fn(const atbus::node& n, const atbus::
     return 0;
 }
 
+static void node_msg_test_setup_exit(uv_loop_t* ev) {
+    size_t left_tick = 128 * 30; // 30s
+    while (left_tick > 0 && UV_EBUSY == uv_loop_close(ev)) {
+        uv_run(ev, UV_RUN_NOWAIT);
+        CASE_THREAD_SLEEP_MS(8);
+        
+        -- left_tick;
+    }
+    
+    CASE_EXPECT_NE(left_tick, 0);
+}
+
 // 定时Ping Pong协议测试
 CASE_TEST(atbus_node_reg, ping_pong)
 {
@@ -164,9 +176,7 @@ CASE_TEST(atbus_node_reg, ping_pong)
         
     }
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_msg_test_setup_exit(&ev_loop);
 }
 
 static int node_msg_test_recv_msg_test_custom_cmd_fn(const atbus::node&, const atbus::endpoint*, const atbus::connection*, atbus::node::bus_id_t, const std::vector<std::pair<const void*, size_t> >& data) {
@@ -253,9 +263,7 @@ CASE_TEST(atbus_node_reg, custom_cmd)
         CASE_EXPECT_EQ(send_data, recv_msg_history.data);
     } while(false);
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_msg_test_setup_exit(&ev_loop);
 }
 
 // 发给自己
@@ -293,9 +301,7 @@ CASE_TEST(atbus_node_reg, reset_and_send)
         CASE_EXPECT_EQ(send_data, recv_msg_history.data);
     }
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_msg_test_setup_exit(&ev_loop);
 }
 
 // 父子节点消息转发测试
@@ -386,9 +392,7 @@ CASE_TEST(atbus_node_reg, parent_and_child)
         }
     }
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_msg_test_setup_exit(&ev_loop);
 }
 
 // 兄弟节点通过父节点转发消息并建立直连测试（测试路由）
@@ -473,9 +477,7 @@ CASE_TEST(atbus_node_reg, transfer_and_connect)
         CASE_EXPECT_NE(NULL, ep1);
     }
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_msg_test_setup_exit(&ev_loop);
 }
 
 // 兄弟节点通过多层父节点转发消息并不会建立直连测试
@@ -573,9 +575,7 @@ CASE_TEST(atbus_node_reg, transfer_only)
         CASE_EXPECT_EQ(NULL, ep1);
     }
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_msg_test_setup_exit(&ev_loop);
 }
 
 // 直连节点发送失败测试
@@ -608,9 +608,7 @@ CASE_TEST(atbus_node_reg, send_failed)
         CASE_EXPECT_EQ(EN_ATBUS_ERR_ATNODE_INVALID_ID, node_parent->send_data(0x12356789, 0, send_data.data(), send_data.size()));
     }
     
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_msg_test_setup_exit(&ev_loop);
 }
 
 // 发送给子节点转发失败的回复通知测试

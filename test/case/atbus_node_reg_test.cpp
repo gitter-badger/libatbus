@@ -97,6 +97,18 @@ static int node_reg_test_remove_endpoint_fn(const atbus::node& n, atbus::endpoin
     return 0;
 }
 
+static void node_reg_test_setup_exit(uv_loop_t* ev) {
+    size_t left_tick = 128 * 30; // 30s
+    while (left_tick > 0 && UV_EBUSY == uv_loop_close(ev)) {
+        uv_run(ev, UV_RUN_NOWAIT);
+        CASE_THREAD_SLEEP_MS(8);
+        
+        -- left_tick;
+    }
+    
+    CASE_EXPECT_NE(left_tick, 0);
+}
+
 // 主动reset流程测试
 // 正常首发数据测试
 CASE_TEST(atbus_node_reg, reset_and_send)
@@ -198,9 +210,7 @@ CASE_TEST(atbus_node_reg, reset_and_send)
 
     }
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_reg_test_setup_exit(&ev_loop);
 }
 
 // 被动析构流程测试
@@ -268,9 +278,7 @@ CASE_TEST(atbus_node_reg, destruct)
         CASE_EXPECT_EQ(NULL, node2->get_endpoint(0x12345678));
     }
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_reg_test_setup_exit(&ev_loop);
 }
 
 // 注册成功流程测试
@@ -328,9 +336,7 @@ CASE_TEST(atbus_node_reg, reg_success)
         CASE_EXPECT_EQ(check_ep_count + 2, recv_msg_history.add_endpoint_count);
     }
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_reg_test_setup_exit(&ev_loop);
 
     CASE_EXPECT_EQ(check_ep_rm + 2, recv_msg_history.remove_endpoint_count);
 }
@@ -410,9 +416,7 @@ CASE_TEST(atbus_node_reg, conflict)
         CASE_EXPECT_EQ(atbus::node::state_t::RUNNING, node_parent->get_state());
     }
 
-    while (UV_EBUSY == uv_loop_close(&ev_loop)) {
-        uv_run(&ev_loop, UV_RUN_ONCE);
-    }
+    node_reg_test_setup_exit(&ev_loop);
 }
 
 // 对父节点重连失败不会导致下线的流程测试
