@@ -50,7 +50,7 @@ Why not c?
 上面最后一条命令可以根据实际环境修改参数，这里只提供一个示例
 
 ### Windows + MinGW(msys2)
-1. for pkg_name in m4 curl wget tar autoconf automake mingw-w64-x86_64-toolchain python; do pacman -S $pkg_name; done
+1. for pkg_name in m4 curl wget tar autoconf automake mingw-w64-i686-toolchain mingw-w64-x86_64-toolchain mingw-w64-x86_64-libtool mingw-w64-i686-libtool python; do pacman -S $pkg_name; done
 2. mingw shell 下执行 mkdir build && cd build && cmake .. 
 
 其他MinGW环境请自行安装依赖库

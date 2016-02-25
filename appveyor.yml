@@ -26,7 +26,12 @@ environment:
           CMAKE_GEN: Visual Studio 12 2013 Win64
         - os: MinGW
           LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-v1.8.0.tar.gz
-          LIBUV_ROOT: C:/Users/appveyor/prebuilt/mingw/1.8.0
+          LIBUV_ROOT: C:/Users/appveyor/prebuilt/mingw32/1.8.0
+          CMAKE_GEN: MinGW32
+        - os: MinGW
+          LIBUV_PKG: http://dist.libuv.org/dist/v1.8.0/libuv-v1.8.0.tar.gz
+          LIBUV_ROOT: C:/Users/appveyor/prebuilt/mingw64/1.8.0
+          CMAKE_GEN: MinGW64
 
 configuration: RelWithDebInfo
     
@@ -49,6 +54,7 @@ clone_depth: 1
 #
 init:
     - git config --global core.autocrlf input
+    - cinst -y msys2
 
 #
 # Install needed build dependencies
@@ -75,7 +81,7 @@ install:
         
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            & C:\MinGW\bin\mingw-get install msys-automake msys-autoconf msys-m4 msys-tar msys-wget msys-libtool mingw32-automake mingw32-autoconf mingw32-libtool mingw32-gcc-tools
+            & C:\msys64\msys2_shell -lc 'for pkg_name in cmake m4 curl wget tar autoconf automake mingw-w64-x86_64-toolchain mingw-w64-x86_64-toolchain mingw-w64-i686-toolchain mingw-w64-x86_64-libtool mingw-w64-i686-libtool python; do pacman -S --noconfirm $pkg_name; done'
             
             $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-v$Env:LIBUV_VERSION.tar.gz"
             
@@ -99,9 +105,19 @@ install:
             
             & 7z x -o"$Env:PKG_SRC_ROOT" "$LIBUV_TAR_PATH"
             
-            echo "bash -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install" 
-            
-            & bash -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install"
+            if ( "$Env:CMAKE_GEN" -ieq "MinGW32" ) {
+                
+                echo "C:\msys64\mingw32_shell -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install" 
+                
+                & C:\msys64\mingw32_shell -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install"
+                
+            } else {
+                
+                echo "C:\msys64\mingw64_shell -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install" 
+                
+                & C:\msys64\mingw64_shell -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install"
+                
+            }
             
         } else {
             if ( Test-Path "$Env:LIBUV_ROOT/libuv.dll" ) {
@@ -146,11 +162,19 @@ build_script:
         
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            echo "cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION'" 
-            
-            & cmake .. -G "MSYS Makefiles" -DLIBUV_ROOT="$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION"
-            
-            & bash -lc "make -j4"
+            if ( "$Env:CMAKE_GEN" -ieq "MinGW32" ) {
+                
+                echo "C:\msys64\mingw32_shell -lc 'cmake .. -DLIBUV_ROOT='$Env:LIBUV_ROOT'" 
+                
+                & C:\msys64\mingw32_shell -lc "cmake .. -DLIBUV_ROOT='$Env:LIBUV_ROOT' && make -j4"
+                
+            } else {
+                
+                echo "C:\msys64\mingw64_shell -lc 'cmake .. -DLIBUV_ROOT='$Env:LIBUV_ROOT' && make -j4" 
+                
+                & C:\msys64\mingw64_shell -lc "cmake .. -DLIBUV_ROOT='$Env:LIBUV_ROOT' && make -j4"
+                
+            }
             
         } else {
             
@@ -169,7 +193,19 @@ test_script:
     - ps: >- 
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            & bash -lc "./test/unit_test.exe"
+            if ( "$Env:CMAKE_GEN" -ieq "MinGW32" ) {
+                
+                echo "C:\msys64\mingw32_shell -lc './test/unit_test.exe'" 
+                
+                & C:\msys64\mingw32_shell -lc "./test/unit_test.exe"
+                
+            } else {
+                
+                echo "C:\msys64\mingw64_shell -lc './test/unit_test.exe" 
+                
+                & C:\msys64\mingw64_shell -lc "./test/unit_test.exe"
+                
+            }
             
         } else {
             
