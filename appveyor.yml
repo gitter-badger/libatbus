@@ -207,7 +207,7 @@ build_script:
         
         cd "$Env:APPVEYOR_BUILD_FOLDER"
         
-        New-Item build
+        New-Item -Path build -ItemType directory
         
         cd build
         
