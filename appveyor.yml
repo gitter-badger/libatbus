@@ -170,6 +170,7 @@ install:
             }
             
         } else {
+
             if ( Test-Path "$Env:LIBUV_ROOT/libuv.dll" ) {
                 
                 echo "using prebuilt cache $Env:LIBUV_ROOT" 
@@ -204,7 +205,7 @@ install:
 #
 build_script:
     - ps: >- 
-        
+
         cd "$Env:APPVEYOR_BUILD_FOLDER"
         
         New-Item -Path build -ItemType directory
@@ -245,11 +246,22 @@ build_script:
         }
 #
 # Run unit test
+# Can not get failed log in mingw, so just check if build success in mingw(custom test myself)
 # 
 test_script:
     - ps: >- 
+
         if ( "$Env:OS" -ieq "MinGW" ) {
+
+            if ( -not (  Test-Path "$Env:APPVEYOR_BUILD_FOLDER/build/test/unit_test.exe" ) ) {
             
+                echo "Build failed.";
+                
+                exit -1;
+                
+            }
+        
+            <#
             if ( "$Env:CMAKE_GEN" -ieq "MinGW32" ) {
                 
                 echo "$Env:MSYS2_PREFIX/mingw32_shell -lc cd '$Env:APPVEYOR_BUILD_FOLDER/build'; ./test/unit_test.exe" 
@@ -267,6 +279,7 @@ test_script:
                 Get-Content "$Env:MSYS2_LOG_FILE"
                 
             }
+            #>
             
         } else {
             
