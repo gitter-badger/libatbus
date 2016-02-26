@@ -83,9 +83,21 @@ init:
         
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            & cinst -y msys2 | Out-Host
+            if ( Test-Path "C:/msys64" ) {
+                
+                $Env:MSYS2_PREFIX="C:/msys64"
+                
+                $Env:PATH="$Env:MSYS2_PREFIX;$Env:PATH"
+                
+            } else {
+                
+                & cinst -y msys2 | Out-Host
+                
+            }
             
             echo "" > "$Env:MSYS2_LOG_FILE"
+            
+            Get-ChildItem "$Env:MSYS2_PREFIX"
             
         }
         
