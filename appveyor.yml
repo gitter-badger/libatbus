@@ -40,10 +40,7 @@ configuration: RelWithDebInfo
 # Cache Cygwin files to speed up build
 #
 cache:
-    - C:\Users\appveyor\setup
     - C:\Users\appveyor\prebuilt
-    - C:\Users\appveyor\pkg_src
-    - C:\tools\msys64
 
 #
 # Do a shallow clone of the repo to speed up build
@@ -62,7 +59,7 @@ init:
             
             & cinst -y msys2
             
-            & C:\msys64\msys2_shell -lc "pacman -Syu --noconfirm"
+            & msys2_shell -lc "pacman -Syu --noconfirm"
             
         }
 
@@ -97,42 +94,50 @@ install:
         
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            & "$Env:MSYS2_PREFIX\msys2_shell" -lc 'for pkg_name in cmake m4 curl wget tar autoconf automake mingw-w64-x86_64-toolchain mingw-w64-x86_64-toolchain mingw-w64-i686-toolchain mingw-w64-x86_64-libtool mingw-w64-i686-libtool python; do pacman -S --noconfirm $pkg_name; done'
-            
-            $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-v$Env:LIBUV_VERSION.tar.gz"
-            
-            $LIBUV_TAR_PATH="$Env:SETUP_ROOT/libuv-v$Env:LIBUV_VERSION.tar"
-            
-            if ( Test-Path "$LIBUV_PKG_PATH" ) {
+            if ( Test-Path "$Env:LIBUV_ROOT/lib/libuv.a" ) {
                 
-                echo "using cache $LIBUV_PKG_PATH"   
+                echo "using prebuilt cache $Env:LIBUV_ROOT" 
                 
             } else {
                 
-                Invoke-WebRequest "$Env:LIBUV_PKG" -OutFile "$LIBUV_PKG_PATH"
+                & msys2_shell -lc 'for pkg_name in cmake m4 curl wget tar autoconf automake mingw-w64-x86_64-toolchain mingw-w64-x86_64-toolchain mingw-w64-i686-toolchain mingw-w64-x86_64-libtool mingw-w64-i686-libtool python; do pacman -S --noconfirm $pkg_name; done'
                 
-            }
+                $LIBUV_PKG_PATH="$Env:SETUP_ROOT/libuv-v$Env:LIBUV_VERSION.tar.gz"
+                
+                $LIBUV_TAR_PATH="$Env:SETUP_ROOT/libuv-v$Env:LIBUV_VERSION.tar"
+                
+                if ( Test-Path "$LIBUV_PKG_PATH" ) {
+                    
+                    echo "using cache $LIBUV_PKG_PATH"   
+                    
+                } else {
+                    
+                    Invoke-WebRequest "$Env:LIBUV_PKG" -OutFile "$LIBUV_PKG_PATH"
+                    
+                }
+                
+                echo "7z x -y -o'$Env:PKG_SRC_ROOT' '$LIBUV_PKG_PATH'" 
+                
+                & 7z x -y -o"$Env:SETUP_ROOT" "$LIBUV_PKG_PATH"
+                
+                echo "7z x -y -o'$Env:PKG_SRC_ROOT' '$LIBUV_TAR_PATH'" 
+                
+                & 7z x -y -o"$Env:PKG_SRC_ROOT" "$LIBUV_TAR_PATH"
+                
+                if ( "$Env:CMAKE_GEN" -ieq "MinGW32" ) {
+                    
+                    echo "mingw32_shell -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install" 
+                    
+                    & mingw32_shell -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install"
+                    
+                } else {
+                    
+                    echo "mingw64_shell -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install" 
+                    
+                    & mingw64_shell -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install"
+                    
+                }
             
-            echo "7z x -y -o'$Env:PKG_SRC_ROOT' '$LIBUV_PKG_PATH'" 
-            
-            & 7z x -y -o"$Env:SETUP_ROOT" "$LIBUV_PKG_PATH"
-            
-            echo "7z x -y -o'$Env:PKG_SRC_ROOT' '$LIBUV_TAR_PATH'" 
-            
-            & 7z x -y -o"$Env:PKG_SRC_ROOT" "$LIBUV_TAR_PATH"
-            
-            if ( "$Env:CMAKE_GEN" -ieq "MinGW32" ) {
-                
-                echo "$Env:MSYS2_PREFIX\\mingw32_shell -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install" 
-                
-                & "$Env:MSYS2_PREFIX\mingw32_shell" -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install"
-                
-            } else {
-                
-                echo "$Env:MSYS2_PREFIX\mingw64_shell -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install" 
-                
-                & "$Env:MSYS2_PREFIX\mingw64_shell" -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh && ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes && make install"
-                
             }
             
         } else {
@@ -180,15 +185,15 @@ build_script:
             
             if ( "$Env:CMAKE_GEN" -ieq "MinGW32" ) {
                 
-                echo "$Env:MSYS2_PREFIX\mingw32_shell -lc cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT'" 
+                echo "mingw32_shell -lc cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT'" 
                 
-                & "$Env:MSYS2_PREFIX\mingw32_shell" -lc "cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' && make -j4"
+                & mingw32_shell -lc "cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' && make -j4"
                 
             } else {
                 
-                echo "$Env:MSYS2_PREFIX\mingw64_shell -lc cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' && make -j4" 
+                echo "mingw64_shell -lc cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' && make -j4" 
                 
-                & "$Env:MSYS2_PREFIX\mingw64_shell" -lc "cmake ..  -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' && make -j4"
+                & mingw64_shell -lc "cmake ..  -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' && make -j4"
                 
             }
             
@@ -211,15 +216,15 @@ test_script:
             
             if ( "$Env:CMAKE_GEN" -ieq "MinGW32" ) {
                 
-                echo "$Env:MSYS2_PREFIX\mingw32_shell -lc './test/unit_test.exe'" 
+                echo "mingw32_shell -lc './test/unit_test.exe'" 
                 
-                & "$Env:MSYS2_PREFIX\mingw32_shell" -lc "./test/unit_test.exe"
+                & mingw32_shell -lc "./test/unit_test.exe"
                 
             } else {
                 
-                echo "$Env:MSYS2_PREFIX\mingw64_shell -lc './test/unit_test.exe" 
+                echo "mingw64_shell -lc './test/unit_test.exe" 
                 
-                & "$Env:MSYS2_PREFIX\mingw64_shell" -lc "./test/unit_test.exe"
+                & mingw64_shell -lc "./test/unit_test.exe"
                 
             }
             

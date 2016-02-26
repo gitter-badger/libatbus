@@ -37,13 +37,13 @@ before_script:
         cp -rf msgpack-$MSGPACK_VERSION/include $MSGPACK_PREFIX/ ;
         rm -rf msgpack-$MSGPACK_VERSION msgpack-$MSGPACK_VERSION.tar.gz ;
     fi
-  - if [ ! -e "$LIBUV_PREFIX/include/uv.h" ] || [ ! -e "$LIBUV_PREFIX/lib/libuv.a" ] ; then
+  - if [ ! -e "$LIBUV_PREFIX/include/uv.h" ] || [ ! -e "$LIBUV_PREFIX/lib/libuv.so" ] ; then
         mkdir -p "$LIBUV_PREFIX";
         wget -c "http://dist.libuv.org/dist/v$LIBUV_VERSION/libuv-v$LIBUV_VERSION.tar.gz" -O libuv-v$LIBUV_VERSION.tar.gz;
         tar -xvf libuv-v$LIBUV_VERSION.tar.gz;
         cd libuv-v$LIBUV_VERSION ;
         ./autogen.sh;
-        ./configure --prefix=$LIBUV_PREFIX --with-pic=yes --enable-shared=no --enable-static=yes;
+        ./configure --prefix=$LIBUV_PREFIX --with-pic=yes --enable-shared=yes --enable-static=no;
         make -j4 install;
         cd -;
         rm -rf libuv-v$LIBUV_VERSION libuv-v$LIBUV_VERSION ;
