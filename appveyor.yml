@@ -60,6 +60,15 @@ init:
             
             & cinst -y msys2 | Out-Host
             
+            echo "" > "$Env:MSYS2_LOG_FILE"
+            
+        }
+        
+    - ps: >- 
+        if ( "$Env:OS" -ieq "MinGW" ) {
+            
+            echo "$Env:MSYS2_PREFIX/msys2_shell -lc 'pacman -Su --noconfirm --force > '$Env:MSYS2_LOG_FILE' 2>&1'"
+            
             & "$Env:MSYS2_PREFIX/msys2_shell" -lc "pacman -Su --noconfirm --force > '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Host
             
             Get-Content "$Env:MSYS2_LOG_FILE"
