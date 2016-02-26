@@ -54,6 +54,31 @@ clone_depth: 1
 #
 init:
     - ps: >-
+        if ( -not ( Test-Path "$Env:LIBUV_ROOT" ) ) { 
+            
+            mkdir "$Env:LIBUV_ROOT"
+            
+        }
+        
+        if ( -not ( Test-Path "$Env:SETUP_ROOT" ) ) { 
+            
+            mkdir "$Env:SETUP_ROOT"
+            
+        }
+        
+        if ( -not ( Test-Path "$Env:PKG_SRC_ROOT" ) ) { 
+            
+            mkdir "$Env:PKG_SRC_ROOT"
+            
+        }
+        
+        if ( -not ( Test-Path "$Env:MSYS2_PREFIX" ) ) { 
+            
+            mkdir "$Env:MSYS2_PREFIX"
+            
+        }
+        
+    - ps: >-
         & git config --global core.autocrlf input
         
         if ( "$Env:OS" -ieq "MinGW" ) {
@@ -79,30 +104,6 @@ init:
 # 
 install:
     - ps: >-
-        if ( -not ( Test-Path "$Env:LIBUV_ROOT" ) ) { 
-            
-            mkdir "$Env:LIBUV_ROOT"
-            
-        }
-        
-        if ( -not ( Test-Path "$Env:SETUP_ROOT" ) ) { 
-            
-            mkdir "$Env:SETUP_ROOT"
-            
-        }
-        
-        if ( -not ( Test-Path "$Env:PKG_SRC_ROOT" ) ) { 
-            
-            mkdir "$Env:PKG_SRC_ROOT"
-            
-        }
-        
-        if ( -not ( Test-Path "$Env:MSYS2_PREFIX" ) ) { 
-            
-            mkdir "$Env:MSYS2_PREFIX"
-            
-        }
-        
         if ( "$Env:OS" -ieq "MinGW" ) {
             
             if ( Test-Path "$Env:LIBUV_ROOT/lib/libuv.a" ) {
