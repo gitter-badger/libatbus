@@ -22,5 +22,12 @@
 
 # Build directory
 build/*
+build_*
 
+# prebuilt directory
 /3rd_party/*/prebuilt
+/3rd_party/*/pkg
+
+# project files
+/.idea
+/.vs

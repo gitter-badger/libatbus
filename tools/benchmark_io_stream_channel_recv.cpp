@@ -75,8 +75,8 @@ static void recv_callback(
 
 static void stat_callback(uv_timer_t* handle) {
     static int secs = 0;
-    static char unit_desc[][4] = { "B", "KB", "MB", "GB", "TB" };
-    static size_t unit_devi[] = { 1ULL, 1ULL << 10, 1ULL << 20, 1ULL << 30, 1ULL << 40 };
+    static char unit_desc[][4] = { "B", "KB", "MB", "GB" };
+    static size_t unit_devi[] = { 1UL, 1UL << 10, 1UL << 20, 1UL << 30 };
     static size_t unit_index = 0;
 
     ++secs;

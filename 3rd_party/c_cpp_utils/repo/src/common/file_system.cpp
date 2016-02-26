@@ -8,11 +8,15 @@
 #include "common/file_system.h"
 #include "common/compiler_message.h"
 
-#ifdef _MSC_VER
+
+#ifdef UTIL_FS_WINDOWS_API
 #include <io.h>
 #include <direct.h>
 #include <Windows.h>
-#include "atlconv.h"
+
+#ifdef _MSC_VER
+#include <atlconv.h>
+#endif
 
 #ifdef UNICODE
 #define VC_TEXT(x) A2W(x)
@@ -28,7 +32,7 @@
 
 #include <dirent.h>
 #include <sys/types.h>
-#include <sys/errno.h>
+#include <errno.h>
 
 #define FUNC_ACCESS(x) access(x, F_OK)
 #define SAFE_STRTOK_S(...) strtok_r(__VA_ARGS__)
@@ -70,7 +74,7 @@ namespace util {
 
         char opr_path[MAX_PATH_LEN];
 
-#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L)
+#if defined(UTIL_FS_C11_API)
         strncpy_s(opr_path, sizeof(opr_path), path, strlen(path));
 #else
         strncpy(opr_path, path, sizeof(opr_path));
@@ -107,7 +111,7 @@ namespace util {
     }
 
     bool file_system::mkdir(const char* dir_path, bool recursion, int mode) {
-#ifndef _MSC_VER
+#ifndef UTIL_FS_WINDOWS_API
         if (0 == mode) {
             mode = S_IRWXU | S_IRWXG | S_IRGRP | S_IWGRP | S_IROTH;
         }
@@ -144,7 +148,7 @@ namespace util {
 
     std::string file_system::get_cwd() {
         std::string ret;
-#ifdef _MSC_VER
+#ifdef UTIL_FS_WINDOWS_API
         ret = _getcwd( NULL, 0 );
 #else
         ret = getcwd( NULL, 0 );
@@ -191,7 +195,7 @@ namespace util {
     }
 
     FILE* file_system::open_tmp_file() {
-#if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L)
+#if defined(UTIL_FS_C11_API)
         FILE* ret = NULL;
         if (0 == tmpfile_s(&ret)) {
             return ret;
@@ -216,7 +220,7 @@ namespace util {
             }
         }
 
-#ifdef _MSC_VER
+#ifdef UTIL_FS_WINDOWS_API
 
         if (!base_dir.empty()) {
             base_dir += DIRECTORY_SEPARATOR;
@@ -248,7 +252,9 @@ namespace util {
                 accept = options & dir_opt_t::EN_DOT_TOTH;
             }
 
+#ifdef _MSC_VER
             USES_CONVERSION;
+#endif
 
             DWORD flag = GetFileAttributes(VC_TEXT(child_path.c_str()));
             if (FILE_ATTRIBUTE_REPARSE_POINT & flag) {
@@ -394,7 +400,7 @@ namespace util {
             return true;
         }
 
-#ifdef WIN32
+#ifdef _WIN32
         if (((dir_path[0] >= 'a' && dir_path[0] <= 'z') || (dir_path[0] >= 'A' && dir_path[0] <= 'Z')) && dir_path[1] == ':' ) {
             return true;
         }

@@ -34,3 +34,9 @@ set (3RD_PARTY_LIBUV_LINK_NAME ${Libuv_LIBRARIES})
 
 include_directories(${3RD_PARTY_LIBUV_INC_DIR})
 
+
+# mingw
+if (MINGW)
+    EchoWithColor(COLOR GREEN "-- MinGW: custom add lib ws2_32,psapi,userenv,iphlpapi ")
+    list(APPEND 3RD_PARTY_LIBUV_LINK_NAME ws2_32 psapi userenv iphlpapi)
+endif()

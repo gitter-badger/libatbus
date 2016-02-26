@@ -15,14 +15,14 @@
 #include "detail/libatbus_channel_export.h"
 #include "frame/test_macros.h"
 
-#ifndef WIN32
+#ifndef _WIN32
 
 static const size_t MAX_TEST_BUFFER_LEN = 1024 * 256;
 static int g_check_flag = 0;
 static std::pair<size_t, size_t> g_recv_rec = std::make_pair(0, 0);
 static std::list<std::pair<size_t, size_t> > g_check_buff_sequence;
 
-#ifdef WIN32
+#ifdef _WIN32
     #define UNIT_TEST_LISTEN_ADDR "unix://\\\\.\\pipe\\unit_test.sock"
     #define UNIT_TEST_INVALID_ADDR "unix://\\\\.\\pipe\\unit_test.invalid.sock"
 #else

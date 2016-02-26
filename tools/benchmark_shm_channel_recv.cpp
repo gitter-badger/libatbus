@@ -105,8 +105,8 @@ int main(int argc, char* argv[])
 
     // 检查状态
     int secs = 0;
-    char unit_desc[][4] = {"B", "KB", "MB", "GB", "TB"};
-    size_t unit_devi[] = {1ULL, 1ULL<< 10, 1ULL<< 20, 1ULL<< 30, 1ULL<< 40};
+    char unit_desc[][4] = {"B", "KB", "MB", "GB"};
+    size_t unit_devi[] = {1UL, 1UL<< 10, 1UL<< 20, 1UL<< 30};
     size_t unit_index = 0;
 
     while (true) {

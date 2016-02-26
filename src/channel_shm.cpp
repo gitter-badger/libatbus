@@ -22,7 +22,10 @@
 
 #ifdef WIN32
 #include <Windows.h>
-#include "atlconv.h"
+
+#ifdef _MSC_VER
+#include <atlconv.h>
+#endif
 
 #ifdef UNICODE
 #define ATBUS_VC_TEXT(x) A2W(x)
@@ -106,12 +109,14 @@ namespace atbus {
                 }
             }
 
-        #ifdef WIN32
+        #ifdef _WIN32
+        #ifdef _MSC_VER
             USES_CONVERSION;
+        #endif
 
             SYSTEM_INFO si;
             ::GetSystemInfo(&si);
-            size_t page_size = static_cast<std::size_t>(si.dwPageSize);
+            // size_t page_size = static_cast<std::size_t>(si.dwPageSize);
 
             char shm_file_name[64] = {0};
             UTIL_STRFUNC_SNPRINTF(shm_file_name, sizeof(shm_file_name), "libatbus_win_shm_%ld.bus", shm_key);

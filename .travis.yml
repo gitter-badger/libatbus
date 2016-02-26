@@ -5,6 +5,11 @@ env:
     - LANG="zh_CN.UTF-8"
     - CMAKE_PREFIX=$HOME/prebuilt/cmake ;
     - CMAKE_VERSION=3.4.3 ;
+    - LIBUV_PREFIX=$HOME/prebuilt/libuv/1.8.0 ;
+    - LIBUV_VERSION=1.8.0;
+    - MSGPACK_PREFIX=$HOME/prebuilt/msgpack/1.4.0 ;
+    - MSGPACK_VERSION=1.4.0 ;
+    
   matrix:
     - TRAVIS_OS_NAME=osx CC=clang CXX=clang
     - TRAVIS_OS_NAME=osx CC=gcc CXX=gcc
@@ -24,29 +29,52 @@ install:
 
 before_script:
   - REPO_DIR=$PWD;
-  - mkdir -p tools && cd tools ;
-  - if [ ! -e "$CMAKE_PREFIX/bin/cmake" ]; then
-        wget -c "https://github.com/Kitware/CMake/archive/v$CMAKE_VERSION.tar.gz" -O CMake-$CMAKE_VERSION.tar.gz ;
-        tar -axvf CMake-$CMAKE_VERSION.tar.gz > build_cmake.log 2>&1 ;
-        cd CMake-$CMAKE_VERSION ;
-        ./bootstrap --prefix=$CMAKE_PREFIX  >> build_cmake.log 2>&1 ;
-        make -j4 install  >> build_cmake.log 2>&1 ;
+  - cd /tmp
+  - if [ ! -e "$MSGPACK_PREFIX/include/msgpack.hpp" ]; then
+        mkdir -p "$MSGPACK_PREFIX" ;
+        wget -c "https://github.com/msgpack/msgpack-c/releases/download/cpp-$MSGPACK_VERSION/msgpack-$MSGPACK_VERSION.tar.gz" -O msgpack-$MSGPACK_VERSION.tar.gz;
+        tar -xvf msgpack-$MSGPACK_VERSION.tar.gz;
+        cp -rf msgpack-$MSGPACK_VERSION/include $MSGPACK_PREFIX/ ;
+        rm -rf msgpack-$MSGPACK_VERSION msgpack-$MSGPACK_VERSION.tar.gz ;
     fi
+  - if [ ! -e "$LIBUV_PREFIX/include/uv.h" ] || [ ! -e "$LIBUV_PREFIX/lib/libuv.a" ] ; then
+        mkdir -p "$LIBUV_PREFIX";
+        wget -c "http://dist.libuv.org/dist/v$LIBUV_VERSION/libuv-v$LIBUV_VERSION.tar.gz" -O libuv-v$LIBUV_VERSION.tar.gz;
+        tar -xvf libuv-v$LIBUV_VERSION.tar.gz;
+        cd libuv-v$LIBUV_VERSION ;
+        ./autogen.sh;
+        ./configure --prefix=$LIBUV_PREFIX --with-pic=yes --enable-shared=no --enable-static=yes;
+        make -j4 install;
+        cd -;
+        rm -rf libuv-v$LIBUV_VERSION libuv-v$LIBUV_VERSION ;
+    fi
+  - if [ ! -e "$CMAKE_PREFIX/bin/cmake" ]; then
+        mkdir -p "$CMAKE_PREFIX";
+        wget -c "https://github.com/Kitware/CMake/archive/v$CMAKE_VERSION.tar.gz" -O CMake-$CMAKE_VERSION.tar.gz ;
+        tar -xvf CMake-$CMAKE_VERSION.tar.gz;
+        cd CMake-$CMAKE_VERSION ;
+        ./bootstrap --prefix=$CMAKE_PREFIX;
+        make -j4 install;
+        cd -;
+        rm -rf CMake-$CMAKE_VERSION CMake-$CMAKE_VERSION.tar.gz;
+    fi
+  - cd "$REPO_DIR";
+
+script:
+  - REPO_DIR=$PWD;
   - mkdir -p $REPO_DIR/build && cd $REPO_DIR/build ;
-  - $CMAKE_PREFIX/bin/cmake .. -DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX ;
+  - $CMAKE_PREFIX/bin/cmake .. -DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX -DLIBUV_ROOT=$LIBUV_PREFIX -DMSGPACK_ROOT=$MSGPACK_PREFIX ;
+  - make -j4
 
 after_success:
   - test/unit_test
   
-script: 
-  - make -j4
-
 install: true
 
 cache: 
   - apt
   - directories:
-    - $CMAKE_PREFIX
+    - $HOME/prebuilt
     
 branches:
   only:

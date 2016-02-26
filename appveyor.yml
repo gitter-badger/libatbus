@@ -113,13 +113,13 @@ install:
                 
             }
             
-            echo "7z x -o'$Env:PKG_SRC_ROOT' '$LIBUV_PKG_PATH'" 
+            echo "7z x -y -o'$Env:PKG_SRC_ROOT' '$LIBUV_PKG_PATH'" 
             
-            & 7z x -o"$Env:SETUP_ROOT" "$LIBUV_PKG_PATH"
+            & 7z x -y -o"$Env:SETUP_ROOT" "$LIBUV_PKG_PATH"
             
-            echo "7z x -o'$Env:PKG_SRC_ROOT' '$LIBUV_TAR_PATH'" 
+            echo "7z x -y -o'$Env:PKG_SRC_ROOT' '$LIBUV_TAR_PATH'" 
             
-            & 7z x -o"$Env:PKG_SRC_ROOT" "$LIBUV_TAR_PATH"
+            & 7z x -y -o"$Env:PKG_SRC_ROOT" "$LIBUV_TAR_PATH"
             
             if ( "$Env:CMAKE_GEN" -ieq "MinGW32" ) {
                 
@@ -154,9 +154,9 @@ install:
                     
                 }
                 
-                echo "7z x -o'$Env:LIBUV_ROOT' '$LIBUV_PKG_PATH'" 
+                echo "7z x -y -o'$Env:LIBUV_ROOT' '$LIBUV_PKG_PATH'" 
                 
-                & 7z x -o"$Env:LIBUV_ROOT" "$LIBUV_PKG_PATH"
+                & 7z x -y -o"$Env:LIBUV_ROOT" "$LIBUV_PKG_PATH"
             }
         }
 

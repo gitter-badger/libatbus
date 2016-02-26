@@ -23,7 +23,15 @@
 #include <climits>
 #include <cstdio>
 
-#ifdef _MSC_VER
+# if defined(__CYGWIN__)  // Windows Cygwin
+#   define UTIL_FS_POSIX_API
+# elif defined(_WIN32) // Windows default, including MinGW
+#   define UTIL_FS_WINDOWS_API
+# else
+#   define UTIL_FS_POSIX_API 
+# endif
+
+#ifdef UTIL_FS_WINDOWS_API
 #include <io.h>
 #include <direct.h>
 #else
@@ -34,6 +42,7 @@
 
 #if (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) 
 #define UTIL_FS_OPEN(e, f, path, mode) errno_t e = fopen_s(&f, path, mode)
+#define UTIL_FS_C11_API
 #else
 #include <errno.h>
 #define UTIL_FS_OPEN(e, f, path, mode) f = fopen(path, mode); int e = errno
@@ -44,7 +53,7 @@ namespace util {
     class file_system {
     public:
         static const char DIRECTORY_SEPARATOR =
-            #ifdef WIN32
+            #ifdef _WIN32
                 '\\';
             #else
                 '/';
