@@ -58,9 +58,9 @@ init:
         
         if ( "$Env:OS" -ieq "MinGW" ) {
             
-            & cinst -y msys2
+            & cinst -y msys2 | Out-Host
             
-            & "$Env:MSYS2_PREFIX/msys2_shell" -lc "pacman -Su --noconfirm --force > '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Null
+            & "$Env:MSYS2_PREFIX/msys2_shell" -lc "pacman -Su --noconfirm --force > '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Host
             
             Get-Content "$Env:MSYS2_LOG_FILE"
         }
@@ -102,7 +102,7 @@ install:
                 
             } else {
                 
-                & "$Env:MSYS2_PREFIX/msys2_shell" -lc 'for pkg_name in cmake m4 curl wget tar autoconf automake mingw-w64-x86_64-toolchain mingw-w64-x86_64-toolchain mingw-w64-i686-toolchain mingw-w64-x86_64-libtool mingw-w64-i686-libtool python; do pacman -S --noconfirm --force $pkg_name >> '$Env:MSYS2_LOG_FILE' 2>&1; done' | Out-Null
+                & "$Env:MSYS2_PREFIX/msys2_shell" -lc 'for pkg_name in cmake m4 curl wget tar autoconf automake mingw-w64-x86_64-toolchain mingw-w64-x86_64-toolchain mingw-w64-i686-toolchain mingw-w64-x86_64-libtool mingw-w64-i686-libtool python; do pacman -S --noconfirm --force $pkg_name >> '$Env:MSYS2_LOG_FILE' 2>&1; done' | Out-Host
                 
                 Get-Content "$Env:MSYS2_LOG_FILE"
                 
@@ -132,7 +132,7 @@ install:
                     
                     echo "$Env:MSYS2_PREFIX/mingw32_shell -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh ; ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes ; make install" 
                     
-                    & "$Env:MSYS2_PREFIX/mingw32_shell" -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh > '$Env:MSYS2_LOG_FILE' 2>&1; ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes >> '$Env:MSYS2_LOG_FILE' 2>&1; make install >> '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Null
+                    & "$Env:MSYS2_PREFIX/mingw32_shell" -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh > '$Env:MSYS2_LOG_FILE' 2>&1; ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes >> '$Env:MSYS2_LOG_FILE' 2>&1; make install >> '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Host
                     
                     Get-Content "$Env:MSYS2_LOG_FILE"
                     
@@ -140,7 +140,7 @@ install:
                     
                     echo "$Env:MSYS2_PREFIX/mingw64_shell -lc cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh ; ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes ; make install" 
                     
-                    & "$Env:MSYS2_PREFIX/mingw64_shell" -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh  > '$Env:MSYS2_LOG_FILE' 2>&1; ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes >> '$Env:MSYS2_LOG_FILE' 2>&1; make install >> '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Null
+                    & "$Env:MSYS2_PREFIX/mingw64_shell" -lc "cd '$Env:PKG_SRC_ROOT/libuv-v$Env:LIBUV_VERSION' && ./autogen.sh  > '$Env:MSYS2_LOG_FILE' 2>&1; ./configure --prefix=$Env:LIBUV_ROOT --with-pic=yes --enable-shared=no --enable-static=yes >> '$Env:MSYS2_LOG_FILE' 2>&1; make install >> '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Host
                     
                     Get-Content "$Env:MSYS2_LOG_FILE"
                 }
@@ -194,7 +194,7 @@ build_script:
                 
                 echo "$Env:MSYS2_PREFIX/mingw32_shell -lc cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT'; make -j4" 
                 
-                & "$Env:MSYS2_PREFIX/mingw32_shell" -lc "cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' > '$Env:MSYS2_LOG_FILE' 2>&1; make -j4 >> '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Null
+                & "$Env:MSYS2_PREFIX/mingw32_shell" -lc "cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' > '$Env:MSYS2_LOG_FILE' 2>&1; make -j4 >> '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Host
                 
                 Get-Content "$Env:MSYS2_LOG_FILE"
                 
@@ -202,7 +202,7 @@ build_script:
                 
                 echo "$Env:MSYS2_PREFIX/mingw64_shell -lc cmake .. -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT'; make -j4" 
                 
-                & "$Env:MSYS2_PREFIX/mingw64_shell" -lc "cmake ..  -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' > '$Env:MSYS2_LOG_FILE' 2>&1; make -j4 >> '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Null
+                & "$Env:MSYS2_PREFIX/mingw64_shell" -lc "cmake ..  -G 'MSYS Makefiles' -DLIBUV_ROOT='$Env:LIBUV_ROOT' > '$Env:MSYS2_LOG_FILE' 2>&1; make -j4 >> '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Host
                 
                 Get-Content "$Env:MSYS2_LOG_FILE"
                 
@@ -229,7 +229,7 @@ test_script:
                 
                 echo "$Env:MSYS2_PREFIX/mingw32_shell -lc './test/unit_test.exe'" 
                 
-                & "$Env:MSYS2_PREFIX/mingw32_shell" -lc "./test/unit_test.exe > '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Null
+                & "$Env:MSYS2_PREFIX/mingw32_shell" -lc "./test/unit_test.exe > '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Host
                 
                 Get-Content "$Env:MSYS2_LOG_FILE"
                 
@@ -237,7 +237,7 @@ test_script:
                 
                 echo "$Env:MSYS2_PREFIX/mingw64_shell -lc './test/unit_test.exe" 
                 
-                & "$Env:MSYS2_PREFIX/mingw64_shell" -lc "./test/unit_test.exe > '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Null
+                & "$Env:MSYS2_PREFIX/mingw64_shell" -lc "./test/unit_test.exe > '$Env:MSYS2_LOG_FILE' 2>&1" | Out-Host
                 
                 Get-Content "$Env:MSYS2_LOG_FILE"
                 
