@@ -1,4 +1,3 @@
-sudo: false
 language: cpp
 
 env:
@@ -19,14 +18,14 @@ env:
     - TRAVIS_OS_NAME=linux CC=clang-3.6 CXX=clang++-3.6
 
 before_install:
-  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then add-apt-repository -y ppa:ubuntu-toolchain-r/test; fi
-  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then add-apt-repository -y ppa:h-rayflood/llvm-upper; fi
-  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then apt-get update -qq; fi
-  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then apt-get update; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sudo add-apt-repository -y ppa:h-rayflood/llvm-upper; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sudo apt-get update -qq; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sudo apt-get update; fi
   
 install:
-  - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$CC" == "gcc-4.9" ] ; then apt-get install -qq gcc-4.9-multilib g++-4.9-multilib; fi
-  - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$CC" == "clang-3.6" ] ; then apt-get install --allow-unauthenticated -qq clang-3.6; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$CC" == "gcc-4.9" ] ; then sudo apt-get install -qq gcc-4.9-multilib g++-4.9-multilib; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$CC" == "clang-3.6" ] ; then sudo apt-get install --allow-unauthenticated -qq clang-3.6; fi
 
 before_script:
   - REPO_DIR=$PWD;
@@ -69,13 +68,12 @@ script:
 
 after_success:
   - test/unit_test
-  
-install: true
 
 cache: 
-  - apt
-  - directories:
-    - $HOME/prebuilt
+  apt: true
+  ccache: true
+  directories:
+  - $HOME/prebuilt
     
 branches:
   only:
