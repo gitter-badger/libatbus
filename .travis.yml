@@ -11,21 +11,22 @@ env:
     - MSGPACK_VERSION=1.4.0 ;
     
   matrix:
-    - TRAVIS_OS_NAME=osx CC=clang CXX=clang
-    - TRAVIS_OS_NAME=osx CC=gcc CXX=gcc
-    - TRAVIS_OS_NAME=linux CC=gcc CXX=gcc
+    - TRAVIS_OS_NAME=osx CC=clang CXX=clang++
+    - TRAVIS_OS_NAME=osx CC=gcc CXX=g++
+    - TRAVIS_OS_NAME=linux CC=gcc CXX=g++
     - TRAVIS_OS_NAME=linux CC=gcc-4.9 CXX=g++-4.9
-    - TRAVIS_OS_NAME=linux CC=clang-3.6 CXX=clang++-3.6
+    - TRAVIS_OS_NAME=linux CC=clang-3.7 CXX=clang++-3.7
 
 before_install:
   - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test; fi
-  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sudo add-apt-repository -y ppa:h-rayflood/llvm-upper; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sudo add-apt-repository -y "deb http://llvm.org/apt/precise/ llvm-toolchain-precise-3.7 main"; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add - ; fi
   - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sudo apt-get update -qq; fi
   - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sudo apt-get update; fi
   
 install:
   - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$CC" == "gcc-4.9" ] ; then sudo apt-get install -qq gcc-4.9-multilib g++-4.9-multilib; fi
-  - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$CC" == "clang-3.6" ] ; then sudo apt-get install --allow-unauthenticated -qq clang-3.6; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$CC" == "clang-3.7" ] ; then sudo apt-get install --allow-unauthenticated -qq clang-3.7; fi
 
 before_script:
   - REPO_DIR=$PWD;
